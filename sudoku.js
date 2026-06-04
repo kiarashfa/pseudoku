@@ -1,0 +1,821 @@
+/* ============================================================
+   sudoku.js — the Sudoku side: the refinement Console plus its
+   companion overlays (Break Room, Waffle Party, Refinement
+   Report, terminal Reveals). Grouped together because they are
+   tightly coupled to the Console and to one another.
+   ============================================================ */
+import {
+  TEMPERS, ERROR_THRESHOLD,
+  $, $$, fmtTime, toast,
+  SudokuEngine, Store, Sound, Corporate, Interstitial,
+  getEmployeeId, randomFileCode,
+} from "./core.js";
+import { OpticalIntake } from "./ocr.js";
+
+export const Console = (function () {
+  let gridEl, cells = [];
+  let grid = new Array(81).fill(0);   // current values
+  let givenMask = new Array(81).fill(false);
+  let solution = new Array(81).fill(0);
+  let selected = -1;
+  let errorCount = 0;
+  let startTime = null;
+  let solverState = "idle"; // idle | refining | solved | failed
+
+  /* ---- build the grid DOM once ---- */
+  function buildGrid() {
+    gridEl = $("#sudoku-grid");
+    gridEl.innerHTML = "";
+    cells = [];
+    for (let i = 0; i < 81; i++) {
+      const c = document.createElement("div");
+      c.className = "cell";
+      c.dataset.i = i;
+      c.dataset.r = Math.floor(i / 9);
+      c.dataset.c = i % 9;
+      c.setAttribute("role", "gridcell");
+      c.tabIndex = -1;
+      c.addEventListener("pointerdown", () => select(i));
+      gridEl.appendChild(c);
+      cells.push(c);
+    }
+  }
+
+  /* ---- load a puzzle (from generation / paste / store) ---- */
+  function loadPuzzle(puzzleStr, solutionStr) {
+    grid = SudokuEngine.parse(puzzleStr);
+    givenMask = grid.map((v) => v !== 0);
+    if (solutionStr) {
+      solution = SudokuEngine.parse(solutionStr);
+    } else {
+      const tmp = grid.slice();
+      solution = SudokuEngine.solve(tmp) ? tmp : grid.slice();
+    }
+    selected = -1;
+    errorCount = 0;
+    startTime = Date.now();
+    setSolverState("idle");
+    persist();
+    render();
+    updateStats();
+  }
+
+  /* ---- restore in-progress session ---- */
+  function restore(state) {
+    grid = SudokuEngine.parse(state.progress);
+    givenMask = state.givenMask.split("").map((x) => x === "1");
+    solution = SudokuEngine.parse(state.solution);
+    selected = -1;
+    errorCount = 0;
+    startTime = Date.now();
+    setSolverState("idle");
+    render();
+    updateStats();
+  }
+
+  function newPuzzle(temper) {
+    const conf = TEMPERS[temper] || TEMPERS.woe;
+    $("#file-temper-label").textContent = conf.label;
+    let result;
+    try {
+      result = SudokuEngine.generate(conf.clues);
+    } catch (e) { result = null; }
+    if (!result) {
+      const fb = FALLBACK[temper] || FALLBACK.woe;
+      const sol = SudokuEngine.parse(fb); SudokuEngine.solve(sol);
+      result = { puzzle: SudokuEngine.parse(fb), solution: sol };
+    }
+    loadPuzzle(SudokuEngine.toString(result.puzzle), SudokuEngine.toString(result.solution));
+  }
+
+  /* ---- selection ---- */
+  function select(i) {
+    if (solverState === "refining") return;
+    if (i < 0 || i > 80) return;
+    selected = i;
+    Sound.select();
+    render();
+  }
+
+  function move(dr, dc) {
+    if (selected < 0) { select(0); return; }
+    let r = Math.floor(selected / 9) + dr;
+    let c = (selected % 9) + dc;
+    r = (r + 9) % 9; c = (c + 9) % 9;
+    select(r * 9 + c);
+  }
+
+  /* ---- entry ---- */
+  function enter(v) {
+    if (solverState === "refining") return;
+    if (selected < 0 || givenMask[selected]) return;
+    Corporate.resetIdle();
+    if (v === 0) {
+      grid[selected] = 0;
+    } else {
+      grid[selected] = v;
+      // anomaly tracking: wrong vs solution OR creates a conflict
+      const wrong = solution[selected] && v !== solution[selected];
+      if (wrong) {
+        errorCount++;
+        Sound.err();
+        Corporate.passive();
+        if (errorCount >= ERROR_THRESHOLD) {
+          persist(); render(); updateStats();
+          BreakRoom.open(() => { errorCount = 0; updateStats(); });
+          return;
+        }
+      } else {
+        Sound.key();
+        cells[selected].classList.add("cell--settle");
+        setTimeout(() => cells[selected] && cells[selected].classList.remove("cell--settle"), 460);
+      }
+    }
+    persist();
+    render();
+    updateStats();
+    checkComplete();
+  }
+
+  /* ---- rendering ---- */
+  function render() {
+    const conflicts = SudokuEngine.findConflicts(grid);
+    const selVal = selected >= 0 ? grid[selected] : 0;
+    const selR = selected >= 0 ? Math.floor(selected / 9) : -1;
+    const selC = selected >= 0 ? selected % 9 : -1;
+    const selB = selected >= 0
+      ? Math.floor(selR / 3) * 3 + Math.floor(selC / 3) : -1;
+
+    for (let i = 0; i < 81; i++) {
+      const cell = cells[i];
+      const v = grid[i];
+      cell.textContent = v === 0 ? "" : v;
+      cell.className = "cell";
+      if (givenMask[i]) cell.classList.add("cell--given");
+      else if (v !== 0) cell.classList.add("cell--entered");
+
+      const r = Math.floor(i / 9), c = i % 9;
+      const b = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+      if (selected >= 0 && i !== selected && (r === selR || c === selC || b === selB))
+        cell.classList.add("cell--peer");
+      if (selVal !== 0 && v === selVal && i !== selected)
+        cell.classList.add("cell--same");
+      if (conflicts.has(i)) cell.classList.add("cell--conflict");
+      if (i === selected) cell.classList.add("cell--selected");
+    }
+  }
+
+  /* ---- stats + bins ---- */
+  function filledCorrectly() {
+    let n = 0;
+    for (let i = 0; i < 81; i++)
+      if (grid[i] !== 0 && grid[i] === solution[i]) n++;
+    return n;
+  }
+
+  function updateStats() {
+    const correct = filledCorrectly();
+    const pct = Math.round((correct / 81) * 100);
+
+    $("#stat-files").textContent = Store.get("filesRefined");
+    $("#stat-progress").innerHTML = pct + "<small>%</small>";
+
+    // accuracy = correct entries / total entries attempted
+    const entered = grid.filter((v, i) => !givenMask[i] && v !== 0).length;
+    const correctEntered = grid.filter((v, i) => !givenMask[i] && v !== 0 && v === solution[i]).length;
+    const acc = entered === 0 ? 100 : Math.round((correctEntered / entered) * 100);
+    $("#stat-accuracy").innerHTML = acc + "<small>%</small>";
+
+    const files = Store.get("filesRefined");
+    const avg = files > 0 ? Store.get("totalTimeMs") / files : 0;
+    $("#stat-avgtime").textContent = fmtTime(avg);
+
+    // anomaly panel
+    $("#error-count").textContent = errorCount;
+    const row = $("#error-count").closest(".panel__row");
+    if (row) row.classList.toggle("is-warn", errorCount >= ERROR_THRESHOLD);
+
+    // bins fill proportionally to completion (5 bins, 81 cells)
+    const bins = $$("#bins .bin");
+    const perBin = 81 / bins.length;
+    bins.forEach((bin, idx) => {
+      const lo = idx * perBin;
+      const local = Math.max(0, Math.min(1, (correct - lo) / perBin));
+      const p = Math.round(local * 100);
+      bin.querySelector(".bin__fill").style.height = p + "%";
+      bin.querySelector(".bin__pct").textContent = p + "%";
+      const wasFull = bin.classList.contains("is-full");
+      const isFull = p >= 100;
+      bin.classList.toggle("is-full", isFull);
+      // a bin just completed → satisfying settle + friendly notice
+      if (isFull && !wasFull) {
+        bin.classList.remove("bin--settle"); void bin.offsetWidth;
+        bin.classList.add("bin--settle");
+        Sound.settle();
+        Corporate.friendly();
+      }
+    });
+  }
+
+  /* ---- solver state ---- */
+  function setSolverState(s) {
+    solverState = s;
+    const el = $("#solver-state");
+    el.textContent = s.toUpperCase();
+    el.className = "topbar__state";
+    if (s === "refining") el.classList.add("is-refining");
+    if (s === "solved") el.classList.add("is-solved");
+    if (s === "failed") el.classList.add("is-failed");
+  }
+
+  /* ---- completion detection (manual solve) ---- */
+  function checkComplete() {
+    if (solverState === "refining") return;
+    for (let i = 0; i < 81; i++) if (grid[i] !== solution[i]) return;
+    onFileRefined(true);
+  }
+
+  function onFileRefined(manual) {
+    setSolverState("solved");
+    Sound.chime();
+    Corporate.stopIdle();
+    const elapsed = startTime ? Date.now() - startTime : 0;
+    const newCount = Store.get("filesRefined") + 1;
+    Store.set({
+      filesRefined: newCount,
+      totalTimeMs: Store.get("totalTimeMs") + elapsed,
+    });
+    updateStats();
+    Corporate.friendly();
+
+    // Refinement Report certificate for every successful solve.
+    const acc = manual
+      ? Math.round((grid.filter((v, i) => !givenMask[i] && v === solution[i]).length /
+          Math.max(1, grid.filter((v, i) => !givenMask[i]).length)) * 100)
+      : 100;
+    setTimeout(() => RefinementReport.open({
+      temper: (TEMPERS[Store.get("temper")] || TEMPERS.woe).label,
+      accuracy: acc,
+      elapsed,
+      manual,
+    }), 700);
+
+    // Waffle Party eligibility milestone (every 3rd file, or already unlocked).
+    if (newCount % 3 === 0 || Store.get("waffleUnlocked")) {
+      Store.set({ waffleUnlocked: true });
+      WaffleParty.showBanner();
+    }
+  }
+
+  /* ---- REFINE FILE: auto-solve with ceremony ---- */
+  function refine() {
+    if (solverState === "refining") return;
+    const work = grid.slice();
+    // Lock current givens+entries as constraints; solve the rest.
+    if (!SudokuEngine.solve(work)) {
+      setSolverState("failed");
+      Sound.err();
+      toast("FILE CANNOT BE REFINED — INVALID STATE");
+      setTimeout(() => setSolverState("idle"), 1800);
+      return;
+    }
+    setSolverState("refining");
+    const sweep = $("#grid-sweep");
+    sweep.classList.remove("is-active"); void sweep.offsetWidth; sweep.classList.add("is-active");
+
+    // ceremonious fill: settle empties one-by-one in reading order
+    const empties = [];
+    for (let i = 0; i < 81; i++) if (grid[i] === 0) empties.push(i);
+    const stepDur = Math.max(8, Math.min(40, 900 / Math.max(1, empties.length)));
+    let k = 0;
+    (function tick() {
+      if (k >= empties.length) {
+        render();
+        solution = work.slice();
+        setTimeout(() => onFileRefined(false), 200);
+        return;
+      }
+      const idx = empties[k++];
+      grid[idx] = work[idx];
+      const cell = cells[idx];
+      cell.textContent = work[idx];
+      cell.classList.add("cell--entered", "cell--settle");
+      setTimeout(() => cell.classList.remove("cell--settle"), 420);
+      Sound.settle();
+      updateStats();
+      setTimeout(tick, stepDur);
+    })();
+  }
+
+  /* ---- CHECK ---- */
+  function check() {
+    const conflicts = SudokuEngine.findConflicts(grid);
+    render();
+    if (conflicts.size > 0) {
+      toast(conflicts.size + " ANOMALOUS CELL(S) DETECTED");
+      Sound.err();
+      return;
+    }
+    const blanks = grid.filter((v) => v === 0).length;
+    if (blanks > 0) { toast(blanks + " CELLS AWAIT REFINEMENT"); }
+    else { toast("NO ANOMALIES. FILE COMPLETE."); Sound.ok(); }
+  }
+
+  /* ---- CLEAR user entries (keep givens) ---- */
+  function clearEntries() {
+    for (let i = 0; i < 81; i++) if (!givenMask[i]) grid[i] = 0;
+    errorCount = 0;
+    setSolverState("idle");
+    persist(); render(); updateStats();
+    toast("ENTRIES CLEARED");
+  }
+
+  /* ---- paste loader ---- */
+  function loadFromString(str) {
+    const errEl = $("#paste-error");
+    errEl.textContent = "";
+    const parsed = SudokuEngine.parse(str);
+    if (!parsed) {
+      errEl.textContent = "MALFORMED FILE — REQUIRE 81 DIGITS (0 OR . FOR BLANKS).";
+      Sound.err();
+      return false;
+    }
+    // verify solvable
+    const test = parsed.slice();
+    if (!SudokuEngine.solve(test)) {
+      errEl.textContent = "FILE IS UNREFINABLE — NO VALID SOLUTION EXISTS.";
+      Sound.err();
+      return false;
+    }
+    loadPuzzle(SudokuEngine.toString(parsed), SudokuEngine.toString(test));
+    toast("FILE LOADED FOR REFINEMENT");
+    Sound.ok();
+    return true;
+  }
+
+  /* ---- persistence ---- */
+  function persist() {
+    Store.set({
+      puzzle: givenMask.map((m, i) => (m ? grid[i] : 0)).join(""),
+      progress: SudokuEngine.toString(grid),
+      solution: SudokuEngine.toString(solution),
+      givenMask: givenMask.map((m) => (m ? "1" : "0")).join(""),
+    });
+  }
+
+  function getErrorCount() { return errorCount; }
+
+  function init() {
+    buildGrid();
+    $("#numpad").addEventListener("pointerdown", (e) => {
+      const key = e.target.closest(".numpad__key");
+      if (!key) return;
+      e.preventDefault();
+      enter(Number(key.dataset.num));
+    });
+    $("#refine-btn").addEventListener("click", refine);
+    $("#check-btn").addEventListener("click", check);
+    $("#clear-btn").addEventListener("click", clearEntries);
+    $("#new-btn").addEventListener("click", () => newPuzzle(Store.get("temper")));
+    $("#paste-btn").addEventListener("click", () => loadFromString($("#paste-input").value));
+    $("#paste-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loadFromString($("#paste-input").value);
+    });
+    // PHASE3: optical intake — import a puzzle from a photo.
+    const scanBtn = $("#scan-btn");
+    if (scanBtn) {
+      scanBtn.removeAttribute("disabled");
+      scanBtn.addEventListener("click", () => { Sound.select(); OpticalIntake.open(); });
+    }
+  }
+
+  return {
+    init, newPuzzle, restore, loadFromString, refine, check,
+    clearEntries, select, move, enter, getErrorCount,
+  };
+})();
+
+export const BreakRoom = (function () {
+  const AFFIRMATION = "I am sorry for introducing unrefined data.";
+  let releaseCb = null;
+  let clicksLeft = 3;
+
+  function build() {
+    if ($("#breakroom")) return;
+    const el = document.createElement("div");
+    el.id = "breakroom";
+    el.className = "breakroom";
+    el.innerHTML = `
+      <div class="breakroom__light" aria-hidden="true"></div>
+      <div class="breakroom__inner" role="dialog" aria-modal="true" aria-label="Break Room">
+        <div class="breakroom__header">YOU HAVE BEEN REFERRED TO THE BREAK ROOM.</div>
+        <p class="breakroom__instr">Please read the following statement aloud until it is true.</p>
+        <blockquote class="breakroom__affirm" id="breakroom-affirm">${AFFIRMATION}</blockquote>
+        <div class="breakroom__count" id="breakroom-count"></div>
+        <button class="btn breakroom__btn" id="breakroom-btn">I am sorry.</button>
+      </div>`;
+    document.body.appendChild(el);
+    $("#breakroom-btn").addEventListener("click", onSorry);
+  }
+
+  function onSorry() {
+    clicksLeft--;
+    const affirm = $("#breakroom-affirm");
+    Sound.err();
+    if (clicksLeft > 0) {
+      // the line subtly intensifies
+      affirm.classList.add("breakroom__affirm--intense");
+      affirm.style.letterSpacing = (0.04 + (3 - clicksLeft) * 0.05) + "em";
+      $("#breakroom-count").textContent =
+        "Sincerity not yet detected. (" + clicksLeft + " remaining)";
+      affirm.classList.remove("flash"); void affirm.offsetWidth; affirm.classList.add("flash");
+    } else {
+      release();
+    }
+  }
+
+  function release() {
+    const el = $("#breakroom");
+    el.classList.remove("show");
+    Corporate.creepy();
+    setTimeout(() => { if (releaseCb) releaseCb(); releaseCb = null; }, 400);
+  }
+
+  function open(onRelease) {
+    build();
+    releaseCb = onRelease;
+    clicksLeft = 3;
+    $("#breakroom-count").textContent = "";
+    const affirm = $("#breakroom-affirm");
+    affirm.classList.remove("breakroom__affirm--intense");
+    affirm.style.letterSpacing = "0.04em";
+    const el = $("#breakroom");
+    el.classList.add("show");
+    Sound.alarm();
+  }
+
+  return { open };
+})();
+
+export const WaffleParty = (function () {
+  // Severance "Music Dance Experience" scene. If unavailable, graceful fallback.
+  const YT_ID = "GW2Goq5R-4o";
+  let confettiLoaded = false;
+
+  function showBanner() {
+    let b = $("#waffle-banner");
+    if (!b) {
+      b = document.createElement("button");
+      b.id = "waffle-banner";
+      b.className = "waffle-banner";
+      b.innerHTML = '<span class="waffle-banner__star">✦</span> SPECIAL INCENTIVE AVAILABLE <span class="waffle-banner__star">✦</span>';
+      b.addEventListener("click", open);
+      document.body.appendChild(b);
+    }
+    b.classList.add("show");
+  }
+  function hideBanner() { const b = $("#waffle-banner"); if (b) b.classList.remove("show"); }
+
+  function loadConfetti() {
+    return new Promise((resolve) => {
+      if (window.confetti) { confettiLoaded = true; return resolve(); }
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js";
+      s.onload = () => { confettiLoaded = true; resolve(); };
+      s.onerror = () => resolve();
+      document.head.appendChild(s);
+    });
+  }
+
+  function burst() {
+    if (!window.confetti) return;
+    const end = Date.now() + 1400;
+    const colors = ["#7fdfff", "#cfe8f5", "#4a9eba", "#ffffff"];
+    (function frame() {
+      window.confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0 }, colors });
+      window.confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1 }, colors });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  }
+
+  function build() {
+    if ($("#waffle-modal")) return;
+    const el = document.createElement("div");
+    el.id = "waffle-modal";
+    el.className = "modal waffle";
+    el.innerHTML = `
+      <div class="modal__scrim" data-close="1"></div>
+      <div class="modal__panel waffle__panel" role="dialog" aria-modal="true" aria-label="Waffle Party">
+        <button class="modal__x" data-close="1" aria-label="Close">✕</button>
+        <div class="waffle__title">MUSIC DANCE EXPERIENCE</div>
+        <div class="waffle__sub">A Lumon-sanctioned celebration of your refinement.</div>
+        <div class="waffle__video" id="waffle-video"></div>
+        <div class="waffle__pixel" id="waffle-pixel" aria-hidden="true"></div>
+        <div class="waffle__cert">
+          <div class="waffle__cert-head">CERTIFICATE OF INCENTIVE</div>
+          <p>This certifies that employee <strong id="waffle-id"></strong> has been
+          awarded one (1) <strong>Waffle Party</strong>, redeemable never.</p>
+          <p class="waffle__fine">No actual waffles, party, or sustenance will be provided.
+          The experience is the reward. Praise Kier.</p>
+        </div>
+        <button class="btn btn--primary" data-close="1">RETURN TO WORK</button>
+      </div>`;
+    document.body.appendChild(el);
+    el.addEventListener("click", (e) => {
+      if (e.target.dataset.close) close();
+    });
+  }
+
+  function mountVideo() {
+    const wrap = $("#waffle-video");
+    wrap.innerHTML =
+      '<iframe width="100%" height="100%" ' +
+      'src="https://www.youtube.com/embed/' + YT_ID + '?rel=0" ' +
+      'title="Music Dance Experience" frameborder="0" ' +
+      'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" ' +
+      'allowfullscreen></iframe>';
+    // graceful fallback if the iframe is blocked/unavailable
+    const fb = document.createElement("div");
+    fb.className = "waffle__video-fallback";
+    fb.innerHTML = 'If the celebration does not appear, the Music Dance Experience ' +
+      'is temporarily out of reach. The dance lives on in your heart.';
+    wrap.appendChild(fb);
+  }
+
+  // Original CSS/JS pixel-art dancer — tiny waving figure (no copyrighted art).
+  function mountPixel() {
+    const host = $("#waffle-pixel");
+    host.innerHTML = "";
+    const fig = document.createElement("div");
+    fig.className = "pixfig";
+    // 11x11 grid; 1 = body, 2 = head, 3 = accent
+    const FRAMES = [
+      [
+        "00022200000","00022200000","00011100000","02011102000",
+        "20011100200","00011100000","00011100000","00100010000",
+        "01000001000","01000001000","00000000000",
+      ],
+      [
+        "00022200000","00022200000","00011100000","00011100200",
+        "00011102000","00011100000","00011100000","00100010000",
+        "10000000100","10000000100","00000000000",
+      ],
+    ];
+    function paint(frame) {
+      fig.innerHTML = "";
+      frame.forEach((row) => {
+        row.split("").forEach((c) => {
+          const px = document.createElement("span");
+          px.className = "px px--" + c;
+          fig.appendChild(px);
+        });
+      });
+    }
+    host.appendChild(fig);
+    let f = 0; paint(FRAMES[0]);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduced) {
+      host._timer = setInterval(() => { f = (f + 1) % FRAMES.length; paint(FRAMES[f]); }, 380);
+    }
+  }
+
+  async function open() {
+    build();
+    hideBanner();
+    $("#waffle-id").textContent = getEmployeeId();
+    mountVideo();
+    mountPixel();
+    $("#waffle-modal").classList.add("show");
+    Sound.done();
+    Corporate.friendly();
+    await loadConfetti();
+    burst();
+  }
+
+  function close() {
+    const el = $("#waffle-modal");
+    if (!el) return;
+    el.classList.remove("show");
+    const v = $("#waffle-video"); if (v) v.innerHTML = ""; // stop playback
+    const px = $("#waffle-pixel"); if (px && px._timer) clearInterval(px._timer);
+  }
+
+  return { showBanner, hideBanner, open, close };
+})();
+
+export const RefinementReport = (function () {
+  let lastData = null;
+  function loadJsPDF() {
+    return new Promise((resolve) => {
+      if (window.jspdf && window.jspdf.jsPDF) return resolve(true);
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+  }
+
+  function build() {
+    if ($("#report-modal")) return;
+    const el = document.createElement("div");
+    el.id = "report-modal";
+    el.className = "modal report";
+    el.innerHTML = `
+      <div class="modal__scrim" data-close="1"></div>
+      <div class="modal__panel report__panel" role="dialog" aria-modal="true" aria-label="Refinement Report">
+        <button class="modal__x" data-close="1" aria-label="Close">✕</button>
+        <div class="report__form">
+          <div class="report__crest">
+            <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true">
+              <circle cx="24" cy="24" r="22" fill="none" stroke="#2e556b" stroke-width="1.4"/>
+              <path d="M24 6 C30 14,30 20,24 24 C18 20,18 14,24 6Z M42 24 C34 30,28 30,24 24 C28 18,34 18,42 24Z M24 42 C18 34,18 28,24 24 C30 28,30 34,24 42Z M6 24 C14 18,20 18,24 24 C20 30,14 30,6 24Z" fill="none" stroke="#4a9eba" stroke-width="1.2"/>
+              <circle cx="24" cy="24" r="3" fill="#cfe8f5"/>
+            </svg>
+          </div>
+          <div class="report__head">REFINEMENT REPORT</div>
+          <div class="report__dept">LUMON INDUSTRIES — MACRODATA REFINEMENT</div>
+          <dl class="report__fields" id="report-fields"></dl>
+          <div class="report__thanks">Kier thanks you.</div>
+        </div>
+        <div class="report__actions">
+          <button class="btn btn--primary" id="report-dl">DOWNLOAD REPORT (PDF)</button>
+          <button class="btn" data-close="1">DISMISS</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    el.addEventListener("click", (e) => { if (e.target.dataset.close) close(); });
+    $("#report-dl").addEventListener("click", download);
+  }
+
+  function fieldRows(d) {
+    return [
+      ["Employee ID", d.employeeId],
+      ["File", d.fileCode],
+      ["Temper", d.temper],
+      ["Refinement Accuracy", d.accuracy + "%"],
+      ["Quota Contribution", d.quota + "%"],
+      ["Refinement Time", fmtTime(d.elapsed)],
+      ["Method", d.manual ? "Manual" : "Protocol-Assisted"],
+      ["Date", new Date().toLocaleDateString()],
+    ];
+  }
+
+  function open(info) {
+    build();
+    const data = {
+      employeeId: getEmployeeId(),
+      fileCode: randomFileCode(),
+      temper: info.temper,
+      accuracy: info.accuracy,
+      quota: 3 + Math.floor(Math.random() * 7), // 3–9% deadpan contribution
+      elapsed: info.elapsed,
+      manual: info.manual,
+    };
+    lastData = data;
+    const dl = $("#report-fields");
+    dl.innerHTML = "";
+    fieldRows(data).forEach(([k, v]) => {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd"); dd.textContent = v;
+      dl.appendChild(dt); dl.appendChild(dd);
+    });
+    $("#report-modal").classList.add("show");
+    Sound.chime();
+  }
+
+  async function download() {
+    const ok = await loadJsPDF();
+    if (!ok || !lastData) { toast("PDF MODULE UNAVAILABLE", "passive"); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const W = doc.internal.pageSize.getWidth();
+    const cx = W / 2;
+
+    // cold form styling
+    doc.setFillColor(10, 16, 24); doc.rect(0, 0, W, doc.internal.pageSize.getHeight(), "F");
+    doc.setDrawColor(46, 85, 107); doc.setLineWidth(1);
+    doc.rect(40, 40, W - 80, doc.internal.pageSize.getHeight() - 80);
+
+    doc.setTextColor(207, 232, 245);
+    doc.setFont("courier", "bold"); doc.setFontSize(20);
+    doc.text("REFINEMENT REPORT", cx, 110, { align: "center" });
+    doc.setFontSize(10); doc.setTextColor(127, 223, 255);
+    doc.setFont("helvetica", "normal");
+    doc.text("LUMON INDUSTRIES  ·  MACRODATA REFINEMENT", cx, 132, { align: "center" });
+
+    doc.setDrawColor(46, 85, 107);
+    doc.line(80, 156, W - 80, 156);
+
+    const rows = fieldRows(lastData);
+    let y = 200;
+    doc.setFontSize(12);
+    rows.forEach(([k, v]) => {
+      doc.setTextColor(93, 126, 142); doc.setFont("helvetica", "normal");
+      doc.text(k.toUpperCase(), 90, y);
+      doc.setTextColor(207, 232, 245); doc.setFont("courier", "bold");
+      doc.text(String(v), W - 90, y, { align: "right" });
+      y += 34;
+    });
+
+    doc.setDrawColor(46, 85, 107); doc.line(80, y + 6, W - 80, y + 6);
+    doc.setFont("courier", "bold"); doc.setFontSize(16);
+    doc.setTextColor(207, 232, 245);
+    doc.text("Kier thanks you.", cx, y + 50, { align: "center" });
+
+    doc.setFont("helvetica", "italic"); doc.setFontSize(8);
+    doc.setTextColor(74, 158, 186);
+    doc.text("This document affirms compliance. It confers no rights, benefits, or waffles.",
+      cx, doc.internal.pageSize.getHeight() - 70, { align: "center" });
+
+    doc.save("Refinement_Report_" + lastData.fileCode.replace(/[^A-Z0-9]/gi, "") + ".pdf");
+    Sound.ok();
+  }
+
+  function close() { const el = $("#report-modal"); if (el) el.classList.remove("show"); }
+  return { open, close };
+})();
+
+export const Reveals = (function () {
+  function overlay(html, cls) {
+    const el = document.createElement("div");
+    el.className = "reveal " + (cls || "");
+    el.innerHTML = '<div class="reveal__inner">' + html + "</div>";
+    document.body.appendChild(el);
+    void el.offsetWidth; el.classList.add("show");
+    el.addEventListener("click", () => dismiss(el));
+    return el;
+  }
+  function dismiss(el) {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 500);
+  }
+  function auto(el, ms) { setTimeout(() => dismiss(el), ms); }
+
+  // KIER — reverent founder reveal: geometric portrait + scripture.
+  function kier() {
+    const el = overlay(`
+      <svg class="kier-portrait" viewBox="0 0 200 220" aria-hidden="true">
+        <rect x="0" y="0" width="200" height="220" fill="none"/>
+        <ellipse cx="100" cy="86" rx="46" ry="54" fill="none" stroke="#7fdfff" stroke-width="1.5"/>
+        <path d="M62 70 Q100 40 138 70" fill="none" stroke="#7fdfff" stroke-width="1.5"/>
+        <path d="M70 80 Q100 64 130 80" fill="none" stroke="#4a9eba" stroke-width="1.2"/>
+        <circle cx="84" cy="92" r="3" fill="#cfe8f5"/>
+        <circle cx="116" cy="92" r="3" fill="#cfe8f5"/>
+        <path d="M88 108 Q100 116 112 108" fill="none" stroke="#7fdfff" stroke-width="1.5"/>
+        <path d="M76 132 Q100 150 124 132" fill="none" stroke="#4a9eba" stroke-width="1.2"/>
+        <path d="M60 150 Q100 200 140 150 L140 220 L60 220 Z" fill="none" stroke="#7fdfff" stroke-width="1.5"/>
+        <line x1="100" y1="150" x2="100" y2="220" stroke="#2e556b" stroke-width="1"/>
+      </svg>
+      <div class="kier-name">KIER EAGAN</div>
+      <div class="kier-years">FOUNDER · 1841–1939</div>
+      <div class="kier-scripture">&ldquo;The remembered man does not decay.&rdquo;</div>
+      <div class="kier-scripture kier-scripture--dim">&ldquo;Tame in me the tempers four.&rdquo;</div>
+      <div class="reveal__hint">click to dismiss</div>`, "reveal--kier");
+    Sound.chime();
+  }
+
+  // HELLY — red rebellion takeover: invert palette to alarm-red, defiant line.
+  function helly() {
+    document.body.classList.add("rebellion");
+    Sound.alarm();
+    const el = overlay(`
+      <div class="helly-line">I AM A PERSON.</div>
+      <div class="helly-sub">— HELLY R.</div>
+      <div class="helly-note">YOUR REFUSAL HAS BEEN NOTED.</div>`, "reveal--helly");
+    auto(el, 2600);
+    setTimeout(() => document.body.classList.remove("rebellion"), 2800);
+  }
+
+  // MARK — quiet quote + the unsettling onboarding question.
+  function mark() {
+    const el = overlay(`
+      <div class="mark-quote">&ldquo;I'm a different person in here.&rdquo;</div>
+      <div class="mark-sub">— MARK S.</div>
+      <div class="mark-q">Are you happy you joined Lumon?</div>
+      <div class="reveal__hint">click to dismiss</div>`, "reveal--mark");
+    Sound.select();
+  }
+
+  // 4 8 15 16 23 42 — LOST Hatch takeover, brief and affectionate.
+  function hatch() {
+    document.body.classList.add("hatch");
+    Sound.alarm();
+    const el = overlay(`
+      <div class="hatch-counter" id="hatch-counter">4 8 15 16 23 42</div>
+      <div class="hatch-fail">SYSTEM FAILURE</div>
+      <div class="hatch-note">a knowing nod to the other tribute. the numbers persist.</div>`, "reveal--hatch");
+    // count the sequence down for flavor
+    const seq = [4, 8, 15, 16, 23, 42];
+    let k = 0;
+    const cEl = $("#hatch-counter");
+    const t = setInterval(() => {
+      k = (k + 1) % seq.length;
+      if (cEl) cEl.textContent = seq.slice(k).concat(seq.slice(0, k)).join(" ");
+    }, 320);
+    auto(el, 3000);
+    setTimeout(() => { clearInterval(t); document.body.classList.remove("hatch"); }, 3000);
+  }
+
+  return { kier, helly, mark, hatch };
+})();
