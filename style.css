@@ -887,105 +887,335 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 }
 
 /* ============================================================
-   PHASE 4 — THE REFINEMENT FLOOR  (standalone mini-game)
-   Reuses the Lumon palette, CRT atmosphere, topbar, bins, and
-   button styles. Self-contained; nothing here affects the
-   intake or Sudoku console screens.
+   PHASE 4 — THE REFINEMENT FLOOR  (standalone macrodata screen)
+   A faithful CRT-terminal recreation: curved glass, scanlines,
+   a header readout, a dense number field with a follow-cursor
+   magnifier, and five O1-O5 bins whose temper meters live inside
+   the box that opens above them.
    ============================================================ */
-.floor-stage {
-  position: relative; flex: 1 1 auto; min-height: 0;
-  overflow: hidden;
+
+/* the floor screen is a black void that frames a single CRT */
+.screen--floor {
+  background: #04070b;
+  align-items: center; justify-content: center;
+  padding: clamp(8px, 2.2vh, 26px);
 }
+
+/* utility controls live in the dark bezel, off the screen itself */
+.floor-controls {
+  position: absolute; top: 14px; right: 16px; z-index: 40;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ---------- the CRT ---------- */
+.crt {
+  position: relative;
+  width: min(100%, calc((100vh - 44px) * 1.34));
+  height: min(100%, calc(100vw / 1.34));
+  max-width: 1240px;
+  border-radius: 32px / 26px;
+  background:
+    radial-gradient(122% 132% at 50% 42%, #0e2433 0%, #0a1a27 46%, #06121c 74%, #030a12 100%);
+  box-shadow:
+    0 0 0 2px #0a1922,
+    0 0 0 11px #060f17,
+    0 0 0 13px #0c2230,
+    0 26px 64px rgba(0,0,0,.72),
+    inset 0 0 150px rgba(0,0,0,.55);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* inner content, slightly scaled for the bulge read */
+.crt__inner {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; flex-direction: column;
+  padding: clamp(14px, 2.3vw, 28px) clamp(16px, 2.8vw, 36px) clamp(8px, 1.4vw, 16px);
+  transform: scale(1.012);
+}
+
+/* scanlines (above content) */
+.crt__scan {
+  position: absolute; inset: 0; z-index: 20; pointer-events: none; border-radius: inherit;
+  background: repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+    rgba(0,0,0,.22) 2.5px, rgba(0,0,0,.22) 3.5px);
+  mix-blend-mode: multiply;
+}
+.crt__scan::after { /* slow rolling bright band */
+  content: ""; position: absolute; left: 0; right: 0; height: 26%; top: -30%;
+  background: linear-gradient(to bottom, transparent, rgba(127,223,255,.05), transparent);
+  animation: crtRoll 8s linear infinite;
+}
+@keyframes crtRoll { from { top: -30%; } to { top: 102%; } }
+
+/* vignette / curved-glass corners */
+.crt__vignette {
+  position: absolute; inset: 0; z-index: 21; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(132% 132% at 50% 50%,
+    transparent 54%, rgba(2,6,10,.5) 80%, rgba(1,3,6,.94) 100%);
+  box-shadow: inset 0 0 64px rgba(2,8,14,.7);
+}
+@media (prefers-reduced-motion: reduce) { .crt__scan::after { display: none; } }
+
+/* ---------- header readout ---------- */
+.floor-head {
+  position: relative; z-index: 2; flex: none;
+  display: flex; align-items: stretch; gap: clamp(8px, 1.6vw, 18px);
+  padding-bottom: 20px; margin-bottom: 16px;
+}
+/* two parallel divider lines under the header (like the gospel) */
+.floor-head::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
+  border-top: 2px solid var(--cyan);
+  border-bottom: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.4);
+}
+/* the bordered box wraps name + tally + percent and stretches to the logo */
+.floor-head__bar {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: clamp(8px, 1.4vw, 16px);
+  padding: 4px 14px; border: 2px solid var(--cyan);
+  box-shadow: 0 0 10px rgba(127,223,255,.25), inset 0 0 10px rgba(127,223,255,.06);
+}
+.floor-head__name {
+  flex: none;
+  font-family: var(--sans); font-weight: 800;
+  font-size: clamp(15px, 2.2vw, 25px); letter-spacing: .02em;
+  color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.6); white-space: nowrap;
+}
+/* the growing tally: a track of vertical bars; the fill reveals more bars
+   from the left as completion climbs */
+.floor-head__tally {
+  position: relative; flex: 1 1 auto; min-width: 30px;
+  height: clamp(15px, 2.2vh, 22px); overflow: hidden;
+}
+.floor-head__tally-track,
+.floor-head__tally-fill {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(to right,
+    var(--cyan) 0 3px, transparent 3px 9px);
+  background-position: left center;
+}
+.floor-head__tally-track { opacity: .16; }
+.floor-head__tally-fill {
+  width: 0%; opacity: .95;
+  filter: drop-shadow(0 0 4px rgba(127,223,255,.6));
+  transition: width .6s var(--ease);
+}
+.floor-head__pct {
+  flex: none; margin-left: auto; padding-left: clamp(6px, 1vw, 12px);
+  font-family: var(--sans); font-weight: 800;
+  font-size: clamp(14px, 2vw, 23px); letter-spacing: .01em;
+  color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.55); white-space: nowrap;
+}
+.floor-head__globe { width: clamp(58px, 7vw, 96px); height: auto; flex: none; align-self: center; }
+.floor-head__globe .g-ring,
+.floor-head__globe .g-line {
+  fill: none; stroke: var(--cyan); stroke-width: 1.4;
+  filter: drop-shadow(0 0 4px rgba(127,223,255,.5));
+}
+.floor-head__globe .g-text {
+  fill: var(--glow); font-family: var(--sans); font-weight: 800;
+  font-size: 13px; letter-spacing: .14em;
+}
+
+/* ---------- number field ---------- */
+.floor-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .floor-canvas {
   position: absolute; inset: 0; width: 100%; height: 100%;
   display: block; z-index: 1; touch-action: none; cursor: crosshair;
 }
-
-/* Decorative rotating drum — cold, atmospheric, non-interactive. */
-.floor-wheel {
-  position: absolute; top: 0; bottom: 0; right: 0;
-  width: 64px; z-index: 2; pointer-events: none;
-  opacity: .5;
-  border-left: 1px solid var(--line);
-  background: linear-gradient(to left, rgba(8,14,20,.55), transparent);
-}
-.floor-wheel__rect {
-  position: absolute; left: 50%; transform: translate(-50%, -50%);
-  height: 4px; background: var(--cyan-dim);
-  box-shadow: 0 0 6px rgba(127,223,255,.4);
-  will-change: top, width, opacity;
-}
-
 .floor-hint {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
   z-index: 3; pointer-events: none;
   font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
-  color: var(--text-dim); text-align: center; max-width: 80%;
-  text-shadow: 0 0 8px rgba(8,14,20,.9);
-  transition: opacity .6s var(--ease);
+  color: var(--text-dim); text-align: center; max-width: 84%;
+  text-shadow: 0 0 8px rgba(4,8,12,.95); transition: opacity .6s var(--ease);
 }
 .floor-hint.is-hidden { opacity: 0; }
 
-/* The five bins along the bottom — echoes the Sudoku .bins strip. */
+/* ---------- bins ---------- */
 .floor-bins {
+  position: relative; z-index: 2; flex: none;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  gap: 1px; background: var(--line);
-  border-top: 1px solid var(--line-strong);
-  z-index: 5;
+  gap: clamp(6px, 1vw, 12px); margin-top: 24px; padding-top: 22px;
 }
+/* two parallel divider lines between the number field and the bins */
+.floor-bins::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px;
+  border-top: 2px solid var(--cyan);
+  border-bottom: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.4);
+}
+/* each bin is a column of TWO separate rectangles (head + foot) */
 .floor-bin {
-  position: relative; background: var(--bg-panel);
-  padding: 10px 14px 14px; overflow: hidden;
-  min-height: 150px; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center;
-  transition: background .2s var(--ease);
+  position: relative; cursor: pointer;
+  display: flex; flex-direction: column; gap: clamp(4px, 0.7vh, 8px);
+  background: none; border: none; box-shadow: none;
+  transition: filter .2s var(--ease);
 }
-.floor-bin:hover { background: var(--bg-panel-2); }
-.floor-bin__fill {
-  position: absolute; left: 0; bottom: 0; width: 100%; height: 0%;
-  background: linear-gradient(to top, rgba(127,223,255,.18), rgba(127,223,255,.03));
-  border-top: 1px solid var(--cyan-dim);
-  transition: height .6s var(--ease); z-index: 0;
-}
-.floor-bin.is-full .floor-bin__fill {
-  background: linear-gradient(to top, rgba(127,255,176,.22), rgba(127,255,176,.04));
-  border-top-color: #7fffb0;
-}
-/* the animated mysterious box (SVG) */
-.floor-bin__box { position: relative; z-index: 2; width: 100%; height: 70px; margin-bottom: 6px; }
-.floor-bin__box svg { width: 100%; height: 100%; overflow: visible; display: block; }
-.floor-bin__box path { fill: none; stroke: var(--cyan); stroke-width: 1.4;
-  filter: drop-shadow(0 0 3px rgba(127,223,255,.4)); }
-.floor-bin__box .box-shadow-line { stroke: var(--cyan-deep); opacity: .55; }
-.floor-bin.is-full .floor-bin__box path { stroke: #7fffb0; }
+.floor-bin:hover { filter: drop-shadow(0 0 6px rgba(127,223,255,.35)); }
 
-.floor-bin__label { position: relative; z-index: 2; display: flex; align-items: baseline; gap: 8px; }
-.floor-bin__code { font-family: var(--mono); font-size: 11px; color: var(--cyan); letter-spacing: .1em; }
-.floor-bin__name { font-size: 10px; letter-spacing: .16em; color: var(--text-dim); font-weight: 600; }
-.floor-bin__pct {
-  position: relative; z-index: 2; font-family: var(--mono); font-size: 18px;
-  color: var(--glow); font-weight: 600; margin-top: 2px;
+/* rectangle 1 — the code plate */
+.floor-bin__head {
+  text-align: center; padding: 3px 0 4px;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.18), inset 0 0 10px rgba(127,223,255,.04);
+  background: rgba(10,22,32,.35);
+  font-family: var(--sans); font-weight: 800; letter-spacing: .14em;
+  font-size: clamp(13px, 1.5vw, 19px); color: var(--cyan);
+  text-shadow: 0 0 8px rgba(127,223,255,.5);
 }
-.floor-bin.is-full .floor-bin__pct { color: #7fffb0; }
+/* rectangle 2 — the fill bar, with the % sitting INSIDE it on the left */
+.floor-bin__foot {
+  position: relative; height: clamp(18px, 2.4vh, 24px);
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.18), inset 0 0 10px rgba(127,223,255,.04);
+  background: rgba(10,22,32,.35); overflow: hidden;
+}
+.floor-bin__bar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  background: var(--cyan); box-shadow: 0 0 8px rgba(127,223,255,.55);
+  transition: width .6s var(--ease); z-index: 1; overflow: hidden;
+}
+.floor-bin__pct {
+  position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
+  font-family: var(--sans); font-weight: 800;
+  font-size: clamp(10px, 1.25vw, 14px); letter-spacing: .02em;
+  white-space: nowrap;
+}
+/* base copy: cyan, sits on the dark track (visible where unfilled) */
+.floor-bin__pct--base { z-index: 0; color: var(--cyan); text-shadow: 0 0 4px rgba(127,223,255,.4); }
+/* fill copy: black, lives inside the bar so it's clipped to the filled width
+   and reads black-on-cyan exactly where the bar covers the text */
+.floor-bin__pct--fill { z-index: 2; color: #04070b; }
+
+.floor-bin.is-full .floor-bin__head { border-color: #7fffb0; color: #7fffb0;
+  box-shadow: 0 0 14px rgba(127,255,176,.36); border-bottom-color: #7fffb0; }
+.floor-bin.is-full .floor-bin__foot { border-color: #7fffb0; box-shadow: 0 0 14px rgba(127,255,176,.36); }
+.floor-bin.is-full .floor-bin__bar { background: #7fffb0; box-shadow: 0 0 8px #7fffb0; }
+.floor-bin.is-full .floor-bin__pct--base { color: #7fffb0; }
 .floor-bin--settle { animation: binSettle .6s var(--ease); }
-.floor-bin--target .floor-bin__box path { stroke: var(--glow); filter: drop-shadow(0 0 7px rgba(207,232,245,.7)); }
+
+/* ---------- the box + temper meter that opens above a bin ---------- */
+/* the box matches the bin width below it (left:0;right:0) */
+.floor-box {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px);
+  z-index: 30; opacity: 0; pointer-events: none;
+}
+.floor-bin.is-open .floor-box { opacity: 1; }
+
+/* the meter panel floats slowly UP out of the box once the lids open */
+.floor-box__panel {
+  position: relative; z-index: 2;
+  border: 2px solid var(--cyan); background: rgba(7,16,24,.96);
+  box-shadow: 0 0 20px rgba(127,223,255,.32), inset 0 0 16px rgba(127,223,255,.05);
+  transform: translateY(42px) scaleY(.5); transform-origin: bottom center;
+  opacity: 0;
+  /* emerges AFTER the lids begin opening, and rises slowly (1.2s) */
+  transition: opacity .9s var(--ease) .45s, transform 1.2s var(--ease) .45s;
+}
+.floor-bin.is-open .floor-box__panel { opacity: 1; transform: translateY(0) scaleY(1); }
+
+.floor-box__code {
+  text-align: center; padding: 2px 0 3px; border-bottom: 2px solid var(--cyan);
+  font-family: var(--sans); font-weight: 800; letter-spacing: .16em;
+  font-size: 15px; color: var(--cyan); text-shadow: 0 0 8px rgba(127,223,255,.5);
+}
+.floor-box__meters { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.floor-meter { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; }
+.floor-meter__lbl { font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: .04em; color: var(--cyan); }
+.floor-meter__track {
+  position: relative; height: 13px; overflow: hidden;
+  background: rgba(127,223,255,.05); border: 1px solid var(--line-strong);
+}
+.floor-meter__bar {
+  display: block; height: 100%; width: 0%; background: var(--c);
+  box-shadow: 0 0 7px var(--c); opacity: .92; transition: width .55s var(--ease);
+}
+.floor-meter__bar.is-full { opacity: 1; box-shadow: 0 0 11px var(--c); }
+
+/* the code plate that sits below the panel, between the open flaps (screen3) */
+.floor-box__base {
+  position: relative; z-index: 2; text-align: center; padding: 2px 0 1px;
+  font-family: var(--sans); font-weight: 800; letter-spacing: .16em;
+  font-size: 15px; color: var(--cyan); text-shadow: 0 0 8px rgba(127,223,255,.5);
+  opacity: 0; transition: opacity .5s var(--ease) 1.3s;
+}
+.floor-bin.is-open .floor-box__base { opacity: 1; }
+
+/* the SVG door — two line-lids hinged at the box mouth, opening UP (\/).
+   Anchored at the box bottom; its height lets the lids rise alongside the
+   panel. overflow is visible so the lids can spread beyond the box width. */
+.floor-box__door {
+  position: absolute; left: -6%; right: -6%; bottom: -2px; height: 78px;
+  z-index: 3; pointer-events: none; overflow: visible;
+}
+.floor-box__door svg { width: 100%; height: 100%; overflow: visible; display: block; }
+.floor-box__door .door-lid {
+  fill: none; stroke: var(--cyan); stroke-width: 2.4; stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(127,223,255,.55));
+}
+.floor-box__door .door-shadow {
+  fill: none; stroke: var(--cyan-deep); stroke-width: 2; opacity: .5;
+}
+
+.floor-bin.is-full .floor-box__panel { border-color: #7fffb0; }
+.floor-bin.is-full .floor-box__door .door-lid { stroke: #7fffb0; }
 
 /* numbers flying into a box */
 .floor-flyer {
   position: fixed; z-index: 9450; font-family: var(--mono); font-weight: 700;
   color: var(--glow); pointer-events: none;
   text-shadow: 0 0 10px rgba(127,223,255,.7);
-  transition: transform 1s var(--ease), opacity 1s var(--ease);
+  transition: transform .9s var(--ease), opacity .9s var(--ease);
   will-change: transform, opacity;
 }
 
-@media (max-width: 860px) {
-  .floor-wheel { width: 44px; }
-  .floor-bin { min-height: 120px; padding: 8px 6px 12px; }
-  .floor-bin__box { height: 54px; }
-  .floor-bin__name { display: none; }
+/* ---------- hex address readout ---------- */
+.floor-hex {
+  flex: none; text-align: center; padding-top: 6px;
+  font-family: var(--mono); font-size: clamp(10px, 1.15vw, 13px); letter-spacing: .2em;
+  color: var(--cyan-dim); text-shadow: 0 0 6px rgba(127,223,255,.3);
 }
-@media (max-width: 560px) {
-  .floor-bin__pct { font-size: 15px; }
-  .floor-hint { font-size: 10px; bottom: 8px; }
+
+/* ---------- "Nope" rejection feedback (thumbs-down) ---------- */
+.floor-nope {
+  position: absolute; inset: 0; z-index: 8;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; opacity: 0; transition: opacity .18s var(--ease);
+}
+.floor-nope.show { opacity: 1; }
+.floor-nope__card {
+  display: flex; align-items: center; gap: 24px;
+  padding: 24px 46px; border: 2px solid var(--cyan); border-radius: 16px;
+  background: rgba(7,14,22,.82);
+  box-shadow: 0 0 34px rgba(127,223,255,.3), inset 0 0 26px rgba(127,223,255,.08);
+  transform: scale(.88); transition: transform .22s var(--ease);
+}
+.floor-nope.show .floor-nope__card { transform: scale(1); }
+.floor-nope__icon { width: 56px; height: 48px; flex: none; }
+.floor-nope__icon * {
+  fill: none; stroke: var(--cyan); stroke-width: 2;
+  stroke-linejoin: round; stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(127,223,255,.5));
+}
+.floor-nope__icon .cuff { fill: rgba(127,223,255,.12); }
+.floor-nope__text { display: flex; flex-direction: column; }
+.floor-nope__word {
+  font-family: var(--sans); font-weight: 800; font-size: 40px; line-height: 1;
+  letter-spacing: .03em; color: var(--glow); text-shadow: 0 0 14px rgba(127,223,255,.5);
+}
+.floor-nope__reason {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .22em;
+  color: var(--text-dim); margin-top: 9px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 760px) {
+  .floor-bin__head { font-size: 12px; }
+  .floor-head__name { font-size: 14px; }
+  .floor-head__pct { font-size: 13px; }
+  .floor-nope__word { font-size: 30px; }
+  .floor-nope__icon { width: 42px; height: 36px; }
 }
