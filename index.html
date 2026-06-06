@@ -22,13 +22,6 @@
 <!-- ====================================================== -->
 <main id="screen-intake" class="screen screen--active screen--monitor" aria-label="Intake">
 
-  <!-- utility controls live in the dark bezel, off the screen -->
-  <div class="bezel-controls">
-    <span class="bezel-id" id="intake-clock">--:--:--</span>
-    <span class="bezel-sep">/</span>
-    <span class="bezel-id">DEPT&nbsp;MDR-01</span>
-  </div>
-
   <div class="crt" id="intake-crt">
     <div class="crt__inner">
 
@@ -60,36 +53,14 @@
           </div>
 
           <h1 class="intake__heading">REFINEMENT INTAKE</h1>
-          <p class="intake__sub">Select the temper of the file you wish to refine.</p>
-
-          <!-- TEMPER selector -->
-          <div class="temper" role="radiogroup" aria-label="Temper selection">
-            <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
-              <span class="temper__index">I</span>
-              <span class="temper__name">WOE</span>
-              <span class="temper__desc">Easy</span>
-            </button>
-            <button class="temper__tile" data-temper="frolic" role="radio" aria-checked="false">
-              <span class="temper__index">II</span>
-              <span class="temper__name">FROLIC</span>
-              <span class="temper__desc">Medium</span>
-            </button>
-            <button class="temper__tile" data-temper="dread" role="radio" aria-checked="false">
-              <span class="temper__index">III</span>
-              <span class="temper__name">DREAD</span>
-              <span class="temper__desc">Hard</span>
-            </button>
-            <button class="temper__tile" data-temper="malice" role="radio" aria-checked="false">
-              <span class="temper__index">IV</span>
-              <span class="temper__name">MALICE</span>
-              <span class="temper__desc">Expert</span>
-            </button>
-          </div>
+          <p class="intake__sub">The work is mysterious and important.</p>
 
           <div class="intake__actions">
             <button id="begin-btn" class="btn btn--primary btn--wide">BEGIN REFINEMENT</button>
             <!-- Phase 4 entry: standalone Refinement Floor mini-game (additive) -->
             <button id="floor-btn" class="btn btn--wide btn--ghost">ENTER THE REFINEMENT FLOOR</button>
+            <!-- About page entry (third action; fills the space the temper grid left) -->
+            <button id="about-btn" class="btn btn--wide btn--ghost">ABOUT THIS PROJECT</button>
           </div>
 
           <!-- Terminal command line -->
@@ -106,10 +77,16 @@
                 spellcheck="false"
                 aria-label="Command line"
                 placeholder="type a command — try HELP" />
-              <span class="terminal__cursor" aria-hidden="true"></span>
             </div>
           </div>
         </section>
+      </div>
+
+      <!-- shared footer: time · paired hex code · department -->
+      <div class="crt-foot">
+        <span class="crt-foot__time" id="intake-clock">--:--:--</span>
+        <span class="crt-foot__hex"><span id="intake-hex-a">0x000000</span> : <span id="intake-hex-b">0x000000</span></span>
+        <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
       </div>
 
     </div>
@@ -123,14 +100,6 @@
 <!-- SCREEN B — REFINEMENT CONSOLE (the real tool)         -->
 <!-- ====================================================== -->
 <main id="screen-console" class="screen screen--monitor" aria-label="Refinement Console" hidden>
-
-  <!-- utility controls live in the dark bezel, off the screen -->
-  <div class="bezel-controls">
-    <span class="topbar__state" id="solver-state">IDLE</span>
-    <button id="ambient-btn" class="iconbtn" aria-label="Toggle ambient hum" title="Ambient hum">≈</button>
-    <button id="mute-btn" class="iconbtn" aria-label="Toggle sound" title="Toggle sound">♪</button>
-    <button id="return-btn" class="btn btn--ghost btn--sm">RETURN TO INTAKE</button>
-  </div>
 
   <div class="crt" id="console-crt">
    <div class="crt__inner">
@@ -154,6 +123,21 @@
         </span>
         <span class="crt-head__pct"><span id="stat-progress">0<small>%</small></span></span>
       </div>
+
+      <!-- two stacked square utility buttons (audio cycle + return home) -->
+      <div class="crt-controls">
+        <button id="mute-btn" class="ctrlbtn" aria-label="Cycle sound mode" title="Sound on">
+          <span class="ctrlbtn__glyph">&#9834;</span>
+        </button>
+        <button id="return-btn" class="ctrlbtn" aria-label="Return to intake" title="RETURN TO INTAKE">
+          <svg class="ctrlbtn__home" viewBox="0 0 24 24" aria-hidden="true">
+            <path class="home-roof" d="M3 11.2 12 4l9 7.2"></path>
+            <path class="home-body" d="M5.2 10v9.2h13.6V10"></path>
+            <path class="home-door" d="M10 19.2v-5.2h4v5.2"></path>
+          </svg>
+        </button>
+      </div>
+      <!-- solver-state chip relocated to the footer -->
     </div>
 
     <!-- stacked body: grid → numpad → two-row toolbar -->
@@ -184,10 +168,11 @@
 
         <!-- row 1 — protocol actions -->
         <div class="toolbar-row toolbar-row--protocol">
-          <button id="refine-btn" class="btn btn--primary">REFINE FILE</button>
+          <button id="new-btn" class="btn">NEW FILE</button>
           <button id="check-btn" class="btn">CHECK</button>
           <button id="clear-btn" class="btn">CLEAR ENTRIES</button>
-          <button id="new-btn" class="btn">NEW FILE</button>
+          <button id="refine-btn" class="btn btn--primary">REFINE FILE</button>
+          <button id="reset-btn" class="btn btn--danger">RESET!</button>
         </div>
 
         <!-- row 2 — manual intake (default state) -->
@@ -211,6 +196,30 @@
           <button id="set-puzzle-btn" class="btn btn--sm btn--primary">SET PUZZLE</button>
           <button id="cancel-manual-btn" class="btn btn--sm">CANCEL</button>
           <span class="paste-error" id="manual-error" role="alert"></span>
+        </div>
+
+        <!-- row 3 — temper (difficulty) selector, relocated from intake -->
+        <div class="toolbar-row toolbar-row--temper" role="radiogroup" aria-label="Temper selection">
+          <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
+            <span class="temper__index">I</span>
+            <span class="temper__name">WOE</span>
+            <span class="temper__desc">Easy</span>
+          </button>
+          <button class="temper__tile" data-temper="frolic" role="radio" aria-checked="false">
+            <span class="temper__index">II</span>
+            <span class="temper__name">FROLIC</span>
+            <span class="temper__desc">Medium</span>
+          </button>
+          <button class="temper__tile" data-temper="dread" role="radio" aria-checked="false">
+            <span class="temper__index">III</span>
+            <span class="temper__name">DREAD</span>
+            <span class="temper__desc">Hard</span>
+          </button>
+          <button class="temper__tile" data-temper="malice" role="radio" aria-checked="false">
+            <span class="temper__index">IV</span>
+            <span class="temper__name">MALICE</span>
+            <span class="temper__desc">Expert</span>
+          </button>
         </div>
       </div>
 
@@ -236,6 +245,16 @@
 
     </div>
 
+    <!-- shared footer: time · paired hex code · department -->
+    <div class="crt-foot">
+      <span class="crt-foot__time">
+        <span class="topbar__state" id="solver-state">IDLE</span>
+        <span id="console-clock">--:--:--</span>
+      </span>
+      <span class="crt-foot__hex"><span id="console-hex-a">0x000000</span> : <span id="console-hex-b">0x000000</span></span>
+      <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
+    </div>
+
    </div>
    <div class="crt__scan" aria-hidden="true"></div>
    <div class="crt__vignette" aria-hidden="true"></div>
@@ -250,18 +269,25 @@
 <!-- ====================================================== -->
 <main id="screen-floor" class="screen screen--floor" aria-label="Refinement Floor" hidden>
 
-  <!-- utility controls live in the dark bezel, off the screen -->
-  <div class="floor-controls">
-    <button id="floor-mute-btn" class="iconbtn" aria-label="Toggle sound" title="Toggle sound">♪</button>
-    <button id="floor-return-btn" class="btn btn--ghost btn--sm">RETURN TO INTAKE</button>
-  </div>
-
   <!-- the CRT screen -->
   <div class="crt" id="floor-crt">
     <div class="crt__inner">
 
       <!-- header readout -->
       <div class="floor-head">
+        <!-- two stacked square utility buttons (audio cycle + return home) -->
+        <div class="crt-controls">
+          <button id="floor-mute-btn" class="ctrlbtn" aria-label="Cycle sound mode" title="Sound on">
+            <span class="ctrlbtn__glyph">&#9834;</span>
+          </button>
+          <button id="floor-return-btn" class="ctrlbtn" aria-label="Return to intake" title="RETURN TO INTAKE">
+            <svg class="ctrlbtn__home" viewBox="0 0 24 24" aria-hidden="true">
+              <path class="home-roof" d="M3 11.2 12 4l9 7.2"></path>
+              <path class="home-body" d="M5.2 10v9.2h13.6V10"></path>
+              <path class="home-door" d="M10 19.2v-5.2h4v5.2"></path>
+            </svg>
+          </button>
+        </div>
         <div class="floor-head__bar">
           <span class="floor-head__name" id="floor-file-name">Cold Harbour</span>
           <span class="floor-head__tally" aria-hidden="true">
@@ -291,8 +317,124 @@
       <!-- the five bins (a box opens above each) -->
       <section class="floor-bins" id="floor-bins" aria-label="Refinement bins"><!-- built by JS --></section>
 
-      <!-- hex address readout -->
-      <div class="floor-hex"><span id="floor-hex-a">0x000000</span> : <span id="floor-hex-b">0x000000</span></div>
+      <!-- shared footer: time · paired hex code · department -->
+      <div class="crt-foot">
+        <span class="crt-foot__time" id="floor-clock">--:--:--</span>
+        <span class="crt-foot__hex"><span id="floor-hex-a">0x000000</span> : <span id="floor-hex-b">0x000000</span></span>
+        <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
+      </div>
+    </div>
+    <div class="crt__scan" aria-hidden="true"></div>
+    <div class="crt__vignette" aria-hidden="true"></div>
+  </div>
+</main>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN D — ABOUT THIS PROJECT                          -->
+<!-- A static read-only page hosted in the shared CRT.      -->
+<!-- ====================================================== -->
+<main id="screen-about" class="screen screen--monitor" aria-label="About this project" hidden>
+
+  <div class="crt" id="about-crt">
+    <div class="crt__inner">
+
+      <!-- shared CRT header: globe mark + title + return control -->
+      <div class="crt-head">
+        <svg class="crt-head__globe" viewBox="0 0 120 70" aria-hidden="true">
+          <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
+          <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
+          <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
+          <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
+          <path class="g-line" d="M16 19 Q60 31 104 19"></path>
+          <path class="g-line" d="M16 51 Q60 39 104 51"></path>
+          <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
+        </svg>
+        <div class="crt-head__bar">
+          <span class="crt-head__name">ABOUT THIS PROJECT</span>
+        </div>
+        <!-- single square control: return home -->
+        <div class="crt-controls crt-controls--single">
+          <button id="about-return-btn" class="ctrlbtn" aria-label="Return to intake" title="RETURN TO INTAKE">
+            <svg class="ctrlbtn__home" viewBox="0 0 24 24" aria-hidden="true">
+              <path class="home-roof" d="M3 11.2 12 4l9 7.2"></path>
+              <path class="home-body" d="M5.2 10v9.2h13.6V10"></path>
+              <path class="home-door" d="M10 19.2v-5.2h4v5.2"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- the prose body -->
+<div class="about-body">
+  <div class="about-prose">
+
+    <p>// ABOUT THIS PROJECT //</p>
+
+    <p>
+      <span class="about-lead">Pseudoku</span> is an affectionate tribute to the
+      world of Lumon Industries, a severed-floor terminal that doubles as a real
+      tool. Behind the cold cyan glass it is two things at once: a faithful
+      recreation of the Macrodata Refinement ritual, and a fully working Sudoku
+      engine that can generate, import, and solve puzzles at four tempers.
+    </p>
+
+    <p>// WHY THIS EXISTS //</p>
+
+    <p>
+      Severance is one of those rare shows that stays with you long after the
+      credits roll. The sterile offices, the strange rituals, the retro
+      technology, and the unsettling mystery of Lumon all felt completely unique.
+      What struck me most, though, was Macrodata Refinement itself.
+    </p>
+
+    <p>
+      The connection between Severance and Sudoku felt surprisingly natural.
+      In one, employees spend their days staring at endless grids of numbers,
+      searching for patterns and sorting them into the correct boxes. In the
+      other, players study a grid of numbers, searching for patterns and placing
+      them into the correct squares.
+      Different procedures. Similar responsibilities.
+    </p>
+
+    <p>// CREDITS &amp; INSPIRATIONS //</p>
+
+    <p>
+      · Severance (2022–present) — Dan Erickson<br>
+      · Ben Stiller and the Severance production team<br>
+      · Apple TV+<br>
+      · Lumon Industries and the Macrodata Refinement department
+    </p>
+
+    <p>// DISCLAIMER //</p>
+
+    <p>
+      This is an unofficial fan tribute created for entertainment and educational
+      purposes.
+      It is not affiliated with, endorsed by, sponsored by, approved by, or
+      associated with Apple TV+, Fifth Season, Red Hour Productions, Lumon
+      Industries, or any department therein.
+      All trademarks, characters, and copyrighted material belong to their
+      respective owners.
+    </p>
+
+    <p>
+      No innies or outies were harmed during development.
+    </p>
+
+  </div>
+</div>
+
+        </div>
+      </div>
+
+      <!-- shared footer: time · paired hex code · department -->
+      <div class="crt-foot">
+        <span class="crt-foot__time" id="about-clock">--:--:--</span>
+        <span class="crt-foot__hex"><span id="about-hex-a">0x000000</span> : <span id="about-hex-b">0x000000</span></span>
+        <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
+      </div>
+
     </div>
     <div class="crt__scan" aria-hidden="true"></div>
     <div class="crt__vignette" aria-hidden="true"></div>
