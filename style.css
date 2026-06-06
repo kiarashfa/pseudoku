@@ -94,39 +94,8 @@ body { position: relative; }
 .screen[hidden] { display: none; }
 
 /* ============================================================
-   TOPBAR
+   SOLVER-STATE CHIP  (lives in the bezel control cluster)
    ============================================================ */
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 26px;
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(to bottom, rgba(13,22,32,.9), rgba(13,22,32,.4));
-  backdrop-filter: blur(2px);
-  z-index: 20;
-}
-.topbar__brand { display: flex; align-items: center; gap: 14px; }
-.brandmark { width: 38px; height: 38px; flex: 0 0 auto; }
-.brandmark--sm { width: 30px; height: 30px; }
-.bm-ring  { fill: none; stroke: var(--cyan-dim); stroke-width: 1.4; opacity: .8; }
-.bm-petal { fill: none; stroke: var(--cyan); stroke-width: 1.3; opacity: .9;
-  filter: drop-shadow(0 0 3px rgba(127,223,255,.5)); }
-.bm-core  { fill: var(--glow); filter: drop-shadow(0 0 4px var(--cyan)); }
-
-.topbar__title { display: flex; flex-direction: column; line-height: 1.25; }
-.topbar__lumon {
-  font-weight: 700; font-size: 14px; letter-spacing: .28em;
-  color: var(--glow);
-}
-.topbar__dept {
-  font-size: 10px; letter-spacing: .34em; color: var(--text-dim);
-  font-weight: 500;
-}
-.topbar__meta {
-  display: flex; align-items: center; gap: 12px;
-  font-family: var(--mono); font-size: 11px; letter-spacing: .15em;
-  color: var(--text-dim);
-}
-.topbar__sep { color: var(--text-faint); }
 .topbar__state {
   border: 1px solid var(--line-strong); padding: 4px 10px;
   color: var(--cyan); letter-spacing: .25em; font-size: 10px;
@@ -139,8 +108,15 @@ body { position: relative; }
 @keyframes pulse { 50% { opacity: .4; } }
 
 /* ============================================================
-   SCREEN A — FIELD
+   SCREEN A — INTAKE  (hosted in the shared .crt monitor)
+   The drifting number field now fills the CRT body, with the
+   intake console floating centered over it.
    ============================================================ */
+.intake-stage {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
 .field-canvas {
   position: absolute; inset: 0; z-index: 1;
   width: 100%; height: 100%;
@@ -148,11 +124,12 @@ body { position: relative; }
 
 .intake {
   position: relative; z-index: 10;
-  margin: auto;
-  width: min(640px, 92vw);
-  padding: 30px 0;
+  width: min(560px, 92%);
+  max-height: 100%; overflow: auto;
+  padding: 6px 4px;
   text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 22px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(12px, 2vh, 20px);
 }
 .intake__catechism {
   font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
@@ -161,11 +138,12 @@ body { position: relative; }
   text-shadow: 0 0 8px rgba(74,158,186,.4);
 }
 .intake__heading {
-  font-size: clamp(26px, 5vw, 40px); font-weight: 800;
+  font-size: clamp(24px, 4.4vw, 38px); font-weight: 800;
   letter-spacing: .26em; color: var(--glow);
   text-shadow: 0 0 18px rgba(127,223,255,.35);
 }
 .intake__sub { font-size: 12px; color: var(--text-dim); letter-spacing: .18em; }
+.intake__actions { width: 100%; display: flex; flex-direction: column; gap: 12px; }
 
 /* Temper tiles */
 .temper {
@@ -276,54 +254,29 @@ body { position: relative; }
 @keyframes blink { 50% { opacity: 0; } }
 
 /* ============================================================
-   SCREEN B — CONSOLE
+   SCREEN B — CONSOLE  (hosted in the shared .crt monitor)
+   One header (title + live tally), a vertically stacked body
+   (grid → numpad → two-row toolbar), and a 4-cell stats strip
+   pinned to the bottom in the old bins' place.
    ============================================================ */
-.topbar--console { background: linear-gradient(to bottom, rgba(13,22,32,.95), rgba(13,22,32,.6)); }
 
-.quota {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(to bottom, rgba(8,14,20,.7), rgba(8,14,20,.35));
-}
-.quota__cell {
-  padding: 12px 20px; display: flex; flex-direction: column; gap: 4px;
-  border-right: 1px solid var(--line); position: relative; overflow: hidden;
-}
-.quota__cell::after {
-  content: ""; position: absolute; left: 0; top: 0; width: 2px; height: 100%;
-  background: var(--cyan-deep); opacity: .5;
-}
-.quota__cell:last-child { border-right: none; }
-.quota__label {
-  font-size: 9px; letter-spacing: .22em; color: var(--text-faint);
-  text-transform: uppercase; display: flex; align-items: center; gap: 6px;
-}
-.quota__label::before {
-  content: "●"; font-size: 6px; color: var(--cyan-dim); opacity: .6;
-}
-.quota__value {
-  font-family: var(--mono); font-size: 22px; color: var(--cyan);
-  font-weight: 600; letter-spacing: .04em; line-height: 1;
-  text-shadow: 0 0 10px rgba(127,223,255,.2);
-  transition: color .3s, text-shadow .3s;
-}
-.quota__value small { font-size: 12px; color: var(--text-dim); }
-
+/* ---- stacked body fills the screen, stats pinned to the floor ---- */
 .console-body {
-  flex: 1; display: flex; gap: 26px; padding: 24px 26px;
-  overflow: auto; align-items: flex-start;
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(8px, 1.4vh, 16px);
 }
 
-/* Grid */
-.console-grid-wrap { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+/* Grid — sized off viewport height so the body fills the CRT with no gap.
+   The grid is the flexible element; numpad/toolbar/stats are fixed-ish. */
 .grid-frame {
-  position: relative;
+  position: relative; flex: none;
   padding: 6px; background: var(--bg-panel);
   border: 1px solid var(--line-strong);
   box-shadow: 0 0 40px rgba(0,0,0,.5), inset 0 0 30px rgba(0,0,0,.4);
 }
 .sudoku-grid {
-  --size: min(58vw, 62vh, 540px);
+  --size: min(42vh, 58vw, 440px);
   width: var(--size); height: var(--size);
   display: grid;
   grid-template-columns: repeat(9, 1fr);
@@ -335,7 +288,7 @@ body { position: relative; }
   background: var(--bg-cell);
   display: flex; align-items: center; justify-content: center;
   font-family: var(--mono); font-weight: 700;
-  font-size: calc(var(--size, 500px) / 18);
+  font-size: calc(var(--size, 460px) / 18);
   color: var(--entered);
   cursor: pointer; position: relative; user-select: none;
   transition: background .15s, color .15s;
@@ -374,91 +327,120 @@ body { position: relative; }
 .grid-sweep.is-active { opacity: 1; animation: sweep 1.1s var(--ease); }
 @keyframes sweep { from { height: 0; } to { height: calc(100% - 12px); } }
 
-/* Numpad */
+/* Numpad — compact single row of ten, scaled to the grid width */
 .numpad {
-  display: grid; grid-template-columns: repeat(5, 1fr);
-  gap: 8px; width: min(58vw, 62vh, 540px);
+  flex: none;
+  display: grid; grid-template-columns: repeat(10, 1fr);
+  gap: clamp(5px, 0.7vw, 8px); width: min(42vh, 58vw, 440px);
 }
 .numpad__key {
   aspect-ratio: 1 / 1;
   background: var(--bg-panel); border: 1px solid var(--line-strong);
-  color: var(--cyan); font-family: var(--mono); font-size: 20px; font-weight: 600;
+  color: var(--cyan); font-family: var(--mono);
+  font-size: clamp(13px, 1.5vw, 18px); font-weight: 600;
   cursor: pointer; transition: all .18s var(--ease);
+  display: flex; align-items: center; justify-content: center;
 }
 .numpad__key:hover { border-color: var(--cyan); color: var(--glow);
   background: var(--bg-panel-2); box-shadow: 0 0 12px rgba(127,223,255,.18); }
 .numpad__key:active { transform: translateY(1px); }
-.numpad__key--erase { color: var(--text-dim); font-size: 16px; }
+.numpad__key--erase { color: var(--text-dim); }
 
-/* Side panels */
-.console-side { width: 280px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 18px; }
-.panel {
-  background: var(--bg-panel); border: 1px solid var(--line); padding: 16px;
+/* ---- compact two-row toolbar ---- */
+.console-toolbar {
+  flex: none; width: 100%; max-width: 760px;
+  display: flex; flex-direction: column; gap: clamp(6px, 1vh, 9px);
 }
-.panel__title {
-  font-size: 10px; letter-spacing: .28em; color: var(--cyan-dim);
-  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+.toolbar-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: center; justify-content: center;
 }
-.btn-stack { display: flex; flex-direction: column; gap: 9px; }
-.panel__hint { font-size: 10px; color: var(--text-faint); margin-bottom: 10px; line-height: 1.5; }
-.paste-row { display: flex; gap: 8px; margin-bottom: 10px; }
-.paste-input {
-  flex: 1; min-width: 0; background: var(--bg-cell); border: 1px solid var(--line-strong);
-  color: var(--glow); font-family: var(--mono); font-size: 11px; padding: 9px 10px;
-  outline: none; letter-spacing: .04em;
+.toolbar-row--protocol .btn { flex: 1 1 auto; min-width: 120px; }
+.toolbar-row--intake { width: 100%; }
+.toolbar-row--intake .paste-input {
+  flex: 1 1 200px; min-width: 0;
+  background: var(--bg-cell); border: 1px solid var(--line-strong);
+  color: var(--glow); font-family: var(--mono); font-size: 11px;
+  padding: 9px 11px; outline: none; letter-spacing: .04em;
 }
-.paste-input:focus { border-color: var(--cyan); }
-.paste-input::placeholder { color: var(--text-faint); }
-.paste-error { font-size: 10px; color: var(--danger-glow); min-height: 14px; letter-spacing: .05em; }
+.toolbar-row--intake .paste-input:focus { border-color: var(--cyan); }
+.toolbar-row--intake .paste-input::placeholder { color: var(--text-faint); }
+.toolbar-row .paste-error {
+  flex: 1 0 100%; text-align: center;
+  font-size: 10px; color: var(--danger-glow); min-height: 0; letter-spacing: .05em;
+}
+.toolbar-row .paste-error:empty { display: none; }
 
-.panel--meta { font-family: var(--mono); }
-.panel__row {
-  display: flex; justify-content: space-between; font-size: 11px;
-  color: var(--text-dim); padding: 4px 0; letter-spacing: .08em;
+/* manual-intake state swap (rows, not panels) */
+.manual-edit { display: none; }
+body.is-editing .manual-default { display: none; }
+body.is-editing .manual-edit { display: flex; }
+.manual-clues {
+  display: inline-flex; gap: 8px; align-items: baseline;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+  color: var(--text-dim);
 }
-.panel__row span:last-child { color: var(--cyan); }
-.panel__row.is-warn span:last-child { color: var(--danger-glow); }
+.manual-clues #manual-clues { color: var(--cyan); font-size: 14px; }
+.manual-clues__min { color: var(--text-faint); }
+.manual-clues.is-short #manual-clues { color: var(--danger-glow); }
 
-/* ============================================================
-   BINS
-   ============================================================ */
-.bins {
-  display: grid; grid-template-columns: repeat(5, 1fr);
-  gap: 1px; background: var(--line);
-  border-top: 1px solid var(--line-strong);
+/* the authored givens read like locked givens, but with an active tint */
+.cell--editgiven {
+  color: var(--glow);
+  text-shadow: 0 0 8px rgba(127,223,255,.5);
+  background: #0e2030;
 }
-.bin {
-  position: relative; background: var(--bg-panel);
-  padding: 14px 16px 16px; overflow: hidden; min-height: 78px;
-  display: flex; flex-direction: column; justify-content: flex-end;
+/* while authoring, the protocol row is not applicable — dim + block it */
+body.is-editing .toolbar-row--protocol { opacity: .4; pointer-events: none; filter: saturate(.4); }
+/* a quiet "EDITING" cue on the header title */
+body.is-editing .crt-head__name::after {
+  content: " · EDITING"; color: var(--cyan); opacity: .85;
+  font-size: .7em; letter-spacing: .14em;
 }
-.bin__fill {
-  position: absolute; left: 0; bottom: 0; width: 100%; height: 0%;
-  background: linear-gradient(to top, rgba(127,223,255,.22), rgba(127,223,255,.04));
-  border-top: 1px solid var(--cyan-dim);
-  transition: height .6s var(--ease);
+body.is-editing .crt-head__bar {
+  border-color: var(--glow);
+  box-shadow: 0 0 14px rgba(127,223,255,.4), inset 0 0 12px rgba(127,223,255,.1);
 }
-.bin__label { position: relative; z-index: 2; display: flex; align-items: baseline; gap: 8px; }
-.bin__code { font-family: var(--mono); font-size: 11px; color: var(--cyan); letter-spacing: .1em; }
-.bin__name { font-size: 11px; letter-spacing: .2em; color: var(--text-dim); font-weight: 600; }
-.bin__pct {
-  position: relative; z-index: 2;
-  font-family: var(--mono); font-size: 18px; color: var(--glow);
-  font-weight: 600; margin-top: 4px;
+
+/* ---- bottom stats strip: 4 bordered cells (Floor-bin styling) ---- */
+.console-stats {
+  flex: none; margin-top: auto; width: 100%;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: clamp(6px, 1vw, 12px);
+  padding-top: clamp(12px, 1.8vh, 20px); position: relative;
 }
-.bin.is-full .bin__fill { background: linear-gradient(to top, rgba(127,255,176,.25), rgba(127,255,176,.05));
-  border-top-color: #7fffb0; }
-.bin.is-full .bin__pct { color: #7fffb0; }
-.bin--settle { animation: binSettle .6s var(--ease); }
-@keyframes binSettle {
-  0% { transform: translateY(0); }
-  30% { transform: translateY(-5px); }
-  55% { transform: translateY(2px); }
-  75% { transform: translateY(-1px); }
-  100% { transform: translateY(0); }
+/* twin divider lines above the strip — same motif as the header underline */
+.console-stats::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px;
+  border-top: 2px solid var(--cyan);
+  border-bottom: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.4);
 }
-.bin--settle .bin__fill { animation: binFlash .6s var(--ease); }
-@keyframes binFlash { 40% { filter: brightness(1.8); } }
+.cstat {
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.18), inset 0 0 10px rgba(127,223,255,.04);
+  background: rgba(10,22,32,.35);
+  padding: 7px clamp(8px, 1vw, 14px) 8px;
+  display: flex; flex-direction: column; gap: 3px; overflow: hidden;
+}
+.cstat__label {
+  font-family: var(--sans); font-size: 9px; letter-spacing: .16em;
+  color: var(--cyan-dim); text-transform: uppercase; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.cstat__value {
+  font-family: var(--mono); font-weight: 600;
+  font-size: clamp(15px, 1.9vw, 22px); color: var(--glow);
+  letter-spacing: .02em; line-height: 1; text-shadow: 0 0 10px rgba(127,223,255,.3);
+  transition: color .3s, text-shadow .3s;
+}
+.cstat__value small { font-size: .6em; color: var(--text-dim); }
+.cstat.is-warn .cstat__value { color: var(--danger-glow); text-shadow: 0 0 10px rgba(255,107,90,.4); }
+
+/* solver state chip lives in the bezel now */
+.iconbtn.is-on { color: var(--glow); border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(127,223,255,.2); }
+
 
 .iconbtn.is-on { color: var(--glow); border-color: var(--cyan);
   box-shadow: 0 0 10px rgba(127,223,255,.2); }
@@ -845,21 +827,40 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
    RESPONSIVE
    ============================================================ */
 @media (max-width: 860px) {
-  .console-body { flex-direction: column; align-items: center; padding: 16px; }
-  .console-side { width: 100%; max-width: min(58vw, 62vh, 540px); }
-  .quota { grid-template-columns: repeat(2, 1fr); }
-  .quota__cell:nth-child(2) { border-right: none; }
-  .quota__cell:nth-child(1), .quota__cell:nth-child(2) { border-bottom: 1px solid var(--line); }
-  .sudoku-grid, .numpad { --size: min(90vw, 60vh, 500px); width: min(90vw, 60vh, 500px); }
-  .topbar { padding: 12px 16px; }
-  .topbar__lumon { font-size: 12px; }
+  /* below the breakpoint the 4:3 CRT becomes a flowing column so the
+     grid + controls stack vertically the way they always did on mobile */
+  .screen--monitor, .screen--floor {
+    padding: 10px; align-items: stretch;
+    flex-direction: column; justify-content: flex-start;
+  }
+  .crt {
+    width: 100%; height: auto; min-height: 0; max-width: 560px; margin: 0 auto;
+    border-radius: 18px / 16px;
+    box-shadow: 0 0 0 2px #0a1922, 0 0 0 8px #060f17, 0 0 0 10px #0c2230,
+      0 16px 40px rgba(0,0,0,.6), inset 0 0 90px rgba(0,0,0,.5);
+  }
+  .crt__inner { position: static; transform: none; padding: 16px; }
+  .console-body { gap: 16px; }
+  .crt-head { padding-bottom: 12px; margin-bottom: 14px; }
+  .crt-head__dept { display: none; }
+  .sudoku-grid, .numpad { --size: min(86vw, 56vh, 460px); width: min(86vw, 56vh, 460px); }
+  .console-toolbar { max-width: min(90vw, 500px); }
+  /* controls drop out of the corner and ride above the screen so they
+     never overlap the header on a narrow viewport */
+  .bezel-controls, .floor-controls {
+    position: static; top: auto; right: auto;
+    width: 100%; max-width: 560px; margin: 0 auto 8px;
+    justify-content: flex-end; flex-wrap: wrap; gap: 6px;
+  }
   .optical__rgrid { --rsize: min(72vw, 360px); }
 }
 @media (max-width: 560px) {
   .temper { grid-template-columns: repeat(2, 1fr); }
-  .topbar__meta .btn { font-size: 9px; padding: 7px 9px; }
-  .bin__name { display: none; }
-  .quota__value { font-size: 16px; }
+  .console-stats { grid-template-columns: repeat(2, 1fr); }
+  .cstat__label { font-size: 8px; letter-spacing: .1em; }
+  .cstat__value { font-size: 16px; }
+  .crt-head__name { font-size: 13px; }
+  .toolbar-row--protocol .btn { min-width: 0; flex: 1 1 40%; }
   .modal__panel { padding: 20px; }
   .report__form { padding: 22px 18px 18px; }
   .report__actions { padding: 14px 18px; flex-direction: column; }
@@ -885,6 +886,95 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   }
   .crt-flicker { display: none; }
 }
+
+/* ============================================================
+   SHARED MONITOR — the single CRT that hosts every screen.
+   .screen--monitor frames one .crt in a dark void. The .crt
+   shell, scanlines, vignette and the .crt-head readout are
+   defined ONCE here and reused by intake, console and floor.
+   Change the monitor or the logo here → every page updates.
+   ============================================================ */
+.screen--monitor {
+  background: #04070b;
+  align-items: center; justify-content: center;
+  padding: clamp(8px, 2.2vh, 26px);
+}
+
+/* utility controls live in the dark bezel, off the screen itself */
+.bezel-controls {
+  position: absolute; top: 14px; right: 16px; z-index: 40;
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .15em;
+  color: var(--text-dim);
+}
+.bezel-id  { color: var(--text-dim); }
+.bezel-sep { color: var(--text-faint); }
+
+/* ---------- shared CRT header: globe mark + bordered bar ---------- */
+.crt-head {
+  position: relative; z-index: 2; flex: none;
+  display: flex; align-items: stretch; gap: clamp(8px, 1.6vw, 18px);
+  padding-bottom: 16px; margin-bottom: clamp(12px, 1.8vw, 20px);
+}
+.crt-head::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
+  border-top: 2px solid var(--cyan);
+  border-bottom: 2px solid var(--cyan);
+  box-shadow: 0 0 8px rgba(127,223,255,.4);
+}
+.crt-head__globe { width: clamp(56px, 6.5vw, 92px); height: auto; flex: none; align-self: center; }
+.crt-head__globe .g-ring,
+.crt-head__globe .g-line {
+  fill: none; stroke: var(--cyan); stroke-width: 1.4;
+  filter: drop-shadow(0 0 4px rgba(127,223,255,.5));
+}
+.crt-head__globe .g-text {
+  fill: var(--glow); font-family: var(--sans); font-weight: 800;
+  font-size: 13px; letter-spacing: .14em;
+}
+.crt-head__bar {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: clamp(8px, 1.4vw, 16px);
+  padding: 4px 16px; border: 2px solid var(--cyan);
+  box-shadow: 0 0 10px rgba(127,223,255,.25), inset 0 0 10px rgba(127,223,255,.06);
+}
+.crt-head__name {
+  flex: none;
+  font-family: var(--sans); font-weight: 800;
+  font-size: clamp(14px, 2vw, 23px); letter-spacing: .03em;
+  color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.6); white-space: nowrap;
+}
+.crt-head__dept {
+  flex: none; margin-left: auto;
+  font-family: var(--mono); font-weight: 600;
+  font-size: clamp(10px, 1.3vw, 14px); letter-spacing: .3em;
+  color: var(--text-dim); white-space: nowrap;
+}
+/* the growing tally bar (mirrors the Floor's "Cold Harbour" progress) */
+.crt-head__tally {
+  position: relative; flex: 1 1 auto; min-width: 30px;
+  height: clamp(15px, 2.2vh, 22px); overflow: hidden;
+}
+.crt-head__tally-track,
+.crt-head__tally-fill {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(to right,
+    var(--cyan) 0 3px, transparent 3px 9px);
+  background-position: left center;
+}
+.crt-head__tally-track { opacity: .16; }
+.crt-head__tally-fill {
+  width: 0%; opacity: .95;
+  filter: drop-shadow(0 0 4px rgba(127,223,255,.6));
+  transition: width .6s var(--ease);
+}
+.crt-head__pct {
+  flex: none; margin-left: auto; padding-left: clamp(6px, 1vw, 12px);
+  font-family: var(--sans); font-weight: 800;
+  font-size: clamp(13px, 1.7vw, 21px); letter-spacing: .01em;
+  color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.55); white-space: nowrap;
+}
+.crt-head__pct small { font-size: .62em; color: var(--text-dim); font-weight: 700; }
 
 /* ============================================================
    PHASE 4 — THE REFINEMENT FLOOR  (standalone macrodata screen)
@@ -1096,6 +1186,13 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 .floor-bin.is-full .floor-bin__bar { background: #7fffb0; box-shadow: 0 0 8px #7fffb0; }
 .floor-bin.is-full .floor-bin__pct--base { color: #7fffb0; }
 .floor-bin--settle { animation: binSettle .6s var(--ease); }
+@keyframes binSettle {
+  0% { transform: translateY(0); }
+  30% { transform: translateY(-5px); }
+  55% { transform: translateY(2px); }
+  75% { transform: translateY(-1px); }
+  100% { transform: translateY(0); }
+}
 
 /* ---------- the box + temper meter that opens above a bin ---------- */
 /* the box matches the bin width below it (left:0;right:0) */

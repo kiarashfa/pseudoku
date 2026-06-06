@@ -19,10 +19,10 @@
 
 /* ---- constants / config ---- */
 export const TEMPERS = {
-  woe:    { label: "WOE",    clues: 42 },
-  frolic: { label: "FROLIC", clues: 34 },
-  dread:  { label: "DREAD",  clues: 28 },
-  malice: { label: "MALICE", clues: 24 },
+  woe:    { label: "WOE",    clues: 42, tier: 1 },
+  frolic: { label: "FROLIC", clues: 34, tier: 2 },
+  dread:  { label: "DREAD",  clues: 28, tier: 3 },
+  malice: { label: "MALICE", clues: 24, tier: 4 },
 };
 
 export const ERROR_THRESHOLD = 5; // PHASE2: triggers Break Room modal on reach
@@ -141,6 +141,299 @@ export const SudokuEngine = (function () {
     return true;
   }
 
+  /* ============================================================
+     CONSTRAINT PROPAGATION LAYER (additive, pure)
+
+     Norvig-style candidate model used for: difficulty rating
+     (WOE/FROLIC/DREAD/MALICE), a fast logical solver, and a fast
+     uniqueness check. None of this changes the existing public
+     signatures; it only adds fast paths and new methods.
+
+     Tiers (cheapest first):
+       1 WOE    naked singles + hidden singles
+       2 FROLIC locked candidates (pointing / claiming)
+       3 DREAD  naked pairs + hidden pairs
+       4 MALICE logic stalls -> search/backtracking required
+     ============================================================ */
+
+  // --- unit & peer geometry (computed once) ---------------------
+  const UNITS = (function () {
+    const units = [];
+    for (let r = 0; r < 9; r++) units.push([...Array(9)].map((_, c) => r * 9 + c));
+    for (let c = 0; c < 9; c++) units.push([...Array(9)].map((_, r) => r * 9 + c));
+    for (let b = 0; b < 9; b++) {
+      const br = Math.floor(b / 3) * 3, bc = (b % 3) * 3, g = [];
+      for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++)
+        g.push((br + dr) * 9 + (bc + dc));
+      units.push(g);
+    }
+    return units; // 27 units: rows 0-8, cols 9-17, boxes 18-26
+  })();
+
+  // unitsOf[i] = the three units containing cell i; PEERS[i] = the 20 cells
+  // sharing a unit with i (excluding i).
+  const UNITS_OF = [...Array(81)].map(() => []);
+  for (let u = 0; u < UNITS.length; u++)
+    for (const i of UNITS[u]) UNITS_OF[i].push(u);
+  const PEERS = (function () {
+    const peers = [...Array(81)].map(() => new Set());
+    for (let i = 0; i < 81; i++) {
+      for (const u of UNITS_OF[i]) for (const j of UNITS[u]) if (j !== i) peers[i].add(j);
+    }
+    return peers.map((s) => [...s]);
+  })();
+
+  // Candidate sets are 9-bit masks: bit (v-1) set => v is possible.
+  const ALL = 0b111111111;
+  const BITCOUNT = new Int8Array(512);
+  for (let m = 0; m < 512; m++) BITCOUNT[m] = (m & 1) + BITCOUNT[m >> 1];
+  const bitToVal = (m) => 31 - Math.clz32(m) + 1; // value of a single-bit mask
+  const maskVals = (m) => { const a = []; for (let v = 1; v <= 9; v++) if (m & (1 << (v - 1))) a.push(v); return a; };
+
+  // Build candidate masks from a grid. Returns Int16Array(81) or null on
+  // immediate contradiction. Filled cells get the single placed bit.
+  function buildCandidates(grid) {
+    const cand = new Int16Array(81).fill(ALL);
+    for (let i = 0; i < 81; i++) {
+      const v = grid[i];
+      if (v !== 0) {
+        cand[i] = 1 << (v - 1);
+        for (const p of PEERS[i]) {
+          cand[p] &= ~(1 << (v - 1));
+          if (cand[p] === 0 && grid[p] === 0) return null; // wiped out an empty cell
+        }
+      }
+    }
+    return cand;
+  }
+
+  const solvedMask = (cand) => { for (let i = 0; i < 81; i++) if (BITCOUNT[cand[i]] !== 1) return false; return true; };
+
+  // Assign a single bit to cell i: eliminate every OTHER candidate from i,
+  // letting the natural reduction-to-singleton inside eliminate() propagate
+  // the placement to peers. (Do NOT pre-set cand[i]=bit — that would short-
+  // circuit eliminate's singleton trigger and skip peer propagation.)
+  // Mutates cand. Returns false on contradiction.
+  function assign(cand, i, bit) {
+    const others = cand[i] & ~bit;
+    if (others === 0) {
+      // already the single bit (or empty): still must ensure peers are pruned
+      if (cand[i] === bit) for (const p of PEERS[i]) if (!eliminate(cand, p, bit)) return false;
+      return cand[i] === bit;
+    }
+    for (let v = 1; v <= 9; v++) if (others & (1 << (v - 1))) {
+      if (!eliminate(cand, i, 1 << (v - 1))) return false;
+    }
+    return true;
+  }
+  function eliminate(cand, i, bit) {
+    if (!(cand[i] & bit)) return true;       // already gone
+    cand[i] &= ~bit;
+    if (cand[i] === 0) return false;          // contradiction
+    if (BITCOUNT[cand[i]] === 1) {            // became a naked single -> push to peers
+      const only = cand[i];
+      for (const p of PEERS[i]) if (!eliminate(cand, p, only)) return false;
+    }
+    return true;
+  }
+
+  // --- Tier 1: singles -----------------------------------------
+  // Returns 1 if a placement was made, 0 if none, -1 on contradiction.
+  function stepSingles(cand) {
+    // naked single
+    for (let i = 0; i < 81; i++) {
+      if (BITCOUNT[cand[i]] === 1) continue;
+      if (BITCOUNT[cand[i]] === 0) return -1;
+    }
+    // hidden single: a value with exactly one home in some unit
+    for (const unit of UNITS) {
+      for (let v = 1; v <= 9; v++) {
+        const bit = 1 << (v - 1);
+        let where = -1, n = 0;
+        for (const i of unit) if (cand[i] & bit) { n++; where = i; if (n > 1) break; }
+        if (n === 1 && BITCOUNT[cand[where]] !== 1) {
+          return assign(cand, where, bit) ? 1 : -1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  // --- Tier 2: locked candidates (pointing / claiming) ----------
+  function stepLocked(cand) {
+    let changed = 0;
+    for (let b = 0; b < 9; b++) {
+      const box = UNITS[18 + b];
+      for (let v = 1; v <= 9; v++) {
+        const bit = 1 << (v - 1);
+        const cells = box.filter((i) => cand[i] & bit);
+        if (cells.length < 2) continue;
+        const rows = new Set(cells.map((i) => Math.floor(i / 9)));
+        const cols = new Set(cells.map((i) => i % 9));
+        // pointing: confined to one row/col within the box -> clear rest of that line
+        if (rows.size === 1) {
+          const r = [...rows][0];
+          for (let c = 0; c < 9; c++) { const i = r * 9 + c; if (!box.includes(i) && (cand[i] & bit)) { if (!eliminate(cand, i, bit)) return -1; changed = 1; } }
+        }
+        if (cols.size === 1) {
+          const c = [...cols][0];
+          for (let r = 0; r < 9; r++) { const i = r * 9 + c; if (!box.includes(i) && (cand[i] & bit)) { if (!eliminate(cand, i, bit)) return -1; changed = 1; } }
+        }
+      }
+    }
+    // claiming: a value in a row/col confined to one box -> clear rest of that box
+    for (let u = 0; u < 18; u++) {
+      const line = UNITS[u];
+      for (let v = 1; v <= 9; v++) {
+        const bit = 1 << (v - 1);
+        const cells = line.filter((i) => cand[i] & bit);
+        if (cells.length < 2) continue;
+        const boxes = new Set(cells.map((i) => Math.floor(Math.floor(i / 9) / 3) * 3 + Math.floor((i % 9) / 3)));
+        if (boxes.size === 1) {
+          const box = UNITS[18 + [...boxes][0]];
+          for (const i of box) if (!line.includes(i) && (cand[i] & bit)) { if (!eliminate(cand, i, bit)) return -1; changed = 1; }
+        }
+      }
+    }
+    return changed;
+  }
+
+  // --- Tier 3: naked & hidden pairs ----------------------------
+  function stepPairs(cand) {
+    let changed = 0;
+    for (const unit of UNITS) {
+      // naked pair: two cells sharing the same 2-candidate mask
+      for (let a = 0; a < unit.length; a++) {
+        const ia = unit[a];
+        if (BITCOUNT[cand[ia]] !== 2) continue;
+        for (let b = a + 1; b < unit.length; b++) {
+          const ib = unit[b];
+          if (cand[ib] !== cand[ia]) continue;
+          const pairMask = cand[ia];
+          for (const i of unit) if (i !== ia && i !== ib && (cand[i] & pairMask)) {
+            if (!eliminate(cand, i, cand[i] & pairMask)) return -1; changed = 1;
+          }
+        }
+      }
+      // hidden pair: two values whose only homes in the unit are the same 2 cells
+      const homes = {};
+      for (let v = 1; v <= 9; v++) {
+        const bit = 1 << (v - 1);
+        homes[v] = unit.filter((i) => cand[i] & bit);
+      }
+      for (let v1 = 1; v1 <= 9; v1++) {
+        if (homes[v1].length !== 2) continue;
+        for (let v2 = v1 + 1; v2 <= 9; v2++) {
+          if (homes[v2].length !== 2) continue;
+          if (homes[v1][0] !== homes[v2][0] || homes[v1][1] !== homes[v2][1]) continue;
+          const keep = (1 << (v1 - 1)) | (1 << (v2 - 1));
+          for (const i of homes[v1]) if (cand[i] & ~keep) {
+            if (!eliminate(cand, i, cand[i] & ~keep)) return -1; changed = 1;
+          }
+        }
+      }
+    }
+    return changed;
+  }
+
+  // Run logic to a fixpoint. Returns { cand, status, hardest } where
+  // status is "solved" | "stuck" | "contradiction" and hardest is the
+  // top tier that fired (1..3); 0 means trivially complete from givens.
+  function propagate(grid) {
+    const cand = buildCandidates(grid);
+    if (!cand) return { cand: null, status: "contradiction", hardest: 0 };
+    let hardest = 0;
+    for (;;) {
+      if (solvedMask(cand)) return { cand, status: "solved", hardest };
+      let r = stepSingles(cand);
+      if (r === -1) return { cand, status: "contradiction", hardest };
+      if (r === 1) { hardest = Math.max(hardest, 1); continue; }
+      r = stepLocked(cand);
+      if (r === -1) return { cand, status: "contradiction", hardest };
+      if (r === 1) { hardest = Math.max(hardest, 2); continue; }
+      r = stepPairs(cand);
+      if (r === -1) return { cand, status: "contradiction", hardest };
+      if (r === 1) { hardest = Math.max(hardest, 3); continue; }
+      return { cand, status: "stuck", hardest }; // logic exhausted
+    }
+  }
+
+  // Difficulty rating. Returns one of the temper keys, or "invalid".
+  //   solved by logic -> woe/frolic/dread by hardest tier used
+  //   logic stalls (still needs guessing) -> malice
+  const TIER_KEY = ["woe", "woe", "frolic", "dread"]; // index = hardest (0..3)
+  function rate(grid) {
+    const { status, hardest } = propagate(grid);
+    if (status === "contradiction") return "invalid";
+    if (status === "solved") return TIER_KEY[hardest];
+    return "malice"; // stuck but consistent -> requires search
+  }
+
+  // Logical solve: propagate, then fall back to search only if needed.
+  // Writes the solution into `grid` in place. Returns true if solved.
+  function solveFast(grid) {
+    const res = propagate(grid);
+    if (res.status === "contradiction") return false;
+    if (res.status === "solved") {
+      for (let i = 0; i < 81; i++) grid[i] = bitToVal(res.cand[i]);
+      return true;
+    }
+    // search with propagation at each node (operate on candidate masks)
+    const solution = searchCand(res.cand);
+    if (!solution) return false;
+    for (let i = 0; i < 81; i++) grid[i] = bitToVal(solution[i]);
+    return true;
+  }
+
+  // Backtracking search over candidate masks, propagating after each guess.
+  // Returns a solved mask array or null. Used by solveFast / countFast.
+  function searchCand(cand) {
+    // pick MRV cell among unsolved
+    let best = -1, bestN = 10;
+    for (let i = 0; i < 81; i++) {
+      const n = BITCOUNT[cand[i]];
+      if (n === 1) continue;
+      if (n < bestN) { bestN = n; best = i; if (n === 2) break; }
+    }
+    if (best === -1) return cand;     // all singletons -> solved
+    for (const v of maskVals(cand[best])) {
+      const next = cand.slice();
+      if (assign(next, best, 1 << (v - 1)) && reduceFix(next)) {
+        const got = searchCand(next);
+        if (got) return got;
+      }
+    }
+    return null;
+  }
+  // re-run singles fixpoint after an assign during search (cheap, keeps tree small)
+  function reduceFix(cand) {
+    for (;;) {
+      const r = stepSingles(cand);
+      if (r === -1) return false;
+      if (r === 0) return true;
+    }
+  }
+
+  // Count solutions up to `limit` using propagation (fast uniqueness).
+  function countFast(grid, limit) {
+    const res = propagate(grid);
+    if (res.status === "contradiction") return 0;
+    if (res.status === "solved") return 1;
+    let count = 0;
+    (function rec(cand) {
+      if (count >= limit) return;
+      let best = -1, bestN = 10;
+      for (let i = 0; i < 81; i++) { const n = BITCOUNT[cand[i]]; if (n === 1) continue; if (n < bestN) { bestN = n; best = i; if (n === 2) break; } }
+      if (best === -1) { count++; return; }
+      for (const v of maskVals(cand[best])) {
+        const next = cand.slice();
+        if (assign(next, best, 1 << (v - 1)) && reduceFix(next)) rec(next);
+        if (count >= limit) return;
+      }
+    })(res.cand);
+    return count;
+  }
+
   // Find the empty cell with the fewest candidates (MRV heuristic).
   function findBestCell(grid) {
     let best = -1, bestCount = 10, bestCands = null;
@@ -157,14 +450,20 @@ export const SudokuEngine = (function () {
     return best === -1 ? null : { i: best, cands: bestCands };
   }
 
-  // Solve in place. Returns true if solved.
+  // Solve in place. Returns true if solved. Now propagation-first
+  // (solveFast), which dramatically prunes search on hard grids.
   function solve(grid) {
+    return solveFast(grid);
+  }
+
+  // Original plain MRV backtracker, retained for reference / safety net.
+  function solveBacktrack(grid) {
     const spot = findBestCell(grid);
     if (spot === null) return true;        // no empties -> solved
     if (spot.cands.length === 0) return false;
     for (const v of spot.cands) {
       grid[spot.i] = v;
-      if (solve(grid)) return true;
+      if (solveBacktrack(grid)) return true;
       grid[spot.i] = 0;
     }
     return false;
@@ -189,7 +488,7 @@ export const SudokuEngine = (function () {
   }
 
   function hasUniqueSolution(grid) {
-    return countSolutions(grid.slice(), 2) === 1;
+    return countFast(grid.slice(), 2) === 1;
   }
 
   // --- Generation -------------------------------------------------
@@ -217,25 +516,66 @@ export const SudokuEngine = (function () {
     return grid;
   }
 
-  // Carve a puzzle from a full solution down toward `targetClues`,
-  // preserving a unique solution. Returns { puzzle, solution }.
-  function generate(targetClues) {
+  // Carve a unique puzzle from a full solution, removing as many clues
+  // as possible (down toward `floor`) while preserving uniqueness.
+  // `floor` just bounds how aggressive removal gets; uniqueness is the
+  // real constraint. Returns { puzzle, solution }.
+  function carveUnique(floor) {
     const solution = generateFull();
     const puzzle = solution.slice();
     const order = shuffle([...Array(81).keys()]);
     let clues = 81;
     for (const idx of order) {
-      if (clues <= targetClues) break;
+      if (clues <= floor) break;
       const backup = puzzle[idx];
       if (backup === 0) continue;
       puzzle[idx] = 0;
-      if (hasUniqueSolution(puzzle)) {
-        clues--;
-      } else {
-        puzzle[idx] = backup; // revert — removing it broke uniqueness
-      }
+      if (hasUniqueSolution(puzzle)) clues--;
+      else puzzle[idx] = backup; // reverting — removal broke uniqueness
     }
     return { puzzle, solution };
+  }
+
+  // Per-temper carve floor: harder tempers want sparser grids, which
+  // tend to demand harder techniques. These are starting pressures for
+  // the accept loop, not the accept criterion (rate() is).
+  const CARVE_FLOOR = { woe: 40, frolic: 32, dread: 26, malice: 22 };
+
+  // generate(target):
+  //   - string temper key ("woe".."malice"): generate-rate-accept loop,
+  //     returning a puzzle whose hardest required technique matches the
+  //     target temper. Falls back to the closest rating after a budget.
+  //   - number: legacy clue-count carve (back-compat for old callers).
+  // Returns { puzzle, solution, temper, clues }.
+  function generate(target) {
+    if (typeof target === "number") {
+      const r = carveUnique(target);
+      r.temper = rate(r.puzzle);
+      r.clues = r.puzzle.filter((n) => n !== 0).length;
+      return r;
+    }
+    const want = TEMPERS[target] ? target : "woe";
+    const order = ["woe", "frolic", "dread", "malice"];
+    const wantIdx = order.indexOf(want);
+    const baseFloor = CARVE_FLOOR[want] ?? 30;
+    const BUDGET = 80;
+    let best = null, bestDist = Infinity;
+    for (let attempt = 0; attempt < BUDGET; attempt++) {
+      // jitter the floor a little each attempt so puzzles aren't all the
+      // same clue count and the loop explores nearby difficulty.
+      const floor = baseFloor + (Math.floor(Math.random() * 5) - 2);
+      const r = carveUnique(floor);
+      const got = rate(r.puzzle);
+      if (got === want) {
+        r.temper = got;
+        r.clues = r.puzzle.filter((n) => n !== 0).length;
+        return r;
+      }
+      const dist = got === "invalid" ? 99 : Math.abs(order.indexOf(got) - wantIdx);
+      if (dist < bestDist) { bestDist = dist; best = { ...r, temper: got }; }
+    }
+    best.clues = best.puzzle.filter((n) => n !== 0).length;
+    return best; // closest rating found within budget
   }
 
   // Validate a (possibly partial) grid: returns Set of conflicting indices.
@@ -266,6 +606,9 @@ export const SudokuEngine = (function () {
   return {
     parse, toString, isLegal, solve, hasUniqueSolution,
     generate, generateFull, findConflicts,
+    // additive constraint-propagation layer:
+    rate, propagate, buildCandidates, solveBacktrack,
+    countSolutions: countFast, maskVals,
   };
 })();
 

@@ -18,153 +18,154 @@
 
 <!-- ====================================================== -->
 <!-- SCREEN A — INTAKE / THE SCATTERED FIELD               -->
+<!-- Now hosted inside the shared CRT monitor.              -->
 <!-- ====================================================== -->
-<main id="screen-intake" class="screen screen--active" aria-label="Intake">
+<main id="screen-intake" class="screen screen--active screen--monitor" aria-label="Intake">
 
-  <!-- Header bar -->
-  <header class="topbar">
-    <div class="topbar__brand">
-      <!-- Generated Lumon-style geometric mark (NOT a real logo) -->
-      <svg class="brandmark" viewBox="0 0 48 48" aria-hidden="true">
-        <circle cx="24" cy="24" r="22" class="bm-ring" />
-        <path class="bm-petal" d="M24 6 C30 14, 30 20, 24 24 C18 20, 18 14, 24 6 Z" />
-        <path class="bm-petal" d="M42 24 C34 30, 28 30, 24 24 C28 18, 34 18, 42 24 Z" />
-        <path class="bm-petal" d="M24 42 C18 34, 18 28, 24 24 C30 28, 30 34, 24 42 Z" />
-        <path class="bm-petal" d="M6 24 C14 18, 20 18, 24 24 C20 30, 14 30, 6 24 Z" />
-        <circle cx="24" cy="24" r="3" class="bm-core" />
-      </svg>
-      <div class="topbar__title">
-        <span class="topbar__lumon">LUMON INDUSTRIES</span>
-        <span class="topbar__dept">MACRODATA REFINEMENT</span>
+  <!-- utility controls live in the dark bezel, off the screen -->
+  <div class="bezel-controls">
+    <span class="bezel-id" id="intake-clock">--:--:--</span>
+    <span class="bezel-sep">/</span>
+    <span class="bezel-id">DEPT&nbsp;MDR-01</span>
+  </div>
+
+  <div class="crt" id="intake-crt">
+    <div class="crt__inner">
+
+      <!-- shared header: globe mark + title -->
+      <div class="crt-head">
+        <svg class="crt-head__globe" viewBox="0 0 120 70" aria-hidden="true">
+          <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
+          <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
+          <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
+          <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
+          <path class="g-line" d="M16 19 Q60 31 104 19"></path>
+          <path class="g-line" d="M16 51 Q60 39 104 51"></path>
+          <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
+        </svg>
+        <div class="crt-head__bar">
+          <span class="crt-head__name">LUMON INDUSTRIES</span>
+          <span class="crt-head__dept">MACRODATA REFINEMENT</span>
+        </div>
       </div>
-    </div>
-    <div class="topbar__meta">
-      <span class="topbar__id" id="intake-clock">--:--:--</span>
-      <span class="topbar__sep">/</span>
-      <span class="topbar__id">DEPT&nbsp;MDR-01</span>
-    </div>
-  </header>
 
-  <!-- The drifting number field -->
-  <canvas id="field-canvas" class="field-canvas" aria-hidden="true"></canvas>
+      <!-- the drifting number field fills the screen body -->
+      <div class="intake-stage">
+        <canvas id="field-canvas" class="field-canvas" aria-hidden="true"></canvas>
 
-  <!-- Centered intake console -->
-  <section class="intake">
-    <div class="intake__catechism" id="catechism" aria-live="polite">
-      &ldquo;The remembered man does not decay.&rdquo;
-    </div>
+        <!-- centered intake console floats over the field -->
+        <section class="intake">
+          <div class="intake__catechism" id="catechism" aria-live="polite">
+            &ldquo;The remembered man does not decay.&rdquo;
+          </div>
 
-    <h1 class="intake__heading">REFINEMENT INTAKE</h1>
-    <p class="intake__sub">Select the temper of the file you wish to refine.</p>
+          <h1 class="intake__heading">REFINEMENT INTAKE</h1>
+          <p class="intake__sub">Select the temper of the file you wish to refine.</p>
 
-    <!-- TEMPER selector -->
-    <div class="temper" role="radiogroup" aria-label="Temper selection">
-      <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
-        <span class="temper__index">I</span>
-        <span class="temper__name">WOE</span>
-        <span class="temper__desc">Easy</span>
-      </button>
-      <button class="temper__tile" data-temper="frolic" role="radio" aria-checked="false">
-        <span class="temper__index">II</span>
-        <span class="temper__name">FROLIC</span>
-        <span class="temper__desc">Medium</span>
-      </button>
-      <button class="temper__tile" data-temper="dread" role="radio" aria-checked="false">
-        <span class="temper__index">III</span>
-        <span class="temper__name">DREAD</span>
-        <span class="temper__desc">Hard</span>
-      </button>
-      <button class="temper__tile" data-temper="malice" role="radio" aria-checked="false">
-        <span class="temper__index">IV</span>
-        <span class="temper__name">MALICE</span>
-        <span class="temper__desc">Expert</span>
-      </button>
-    </div>
+          <!-- TEMPER selector -->
+          <div class="temper" role="radiogroup" aria-label="Temper selection">
+            <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
+              <span class="temper__index">I</span>
+              <span class="temper__name">WOE</span>
+              <span class="temper__desc">Easy</span>
+            </button>
+            <button class="temper__tile" data-temper="frolic" role="radio" aria-checked="false">
+              <span class="temper__index">II</span>
+              <span class="temper__name">FROLIC</span>
+              <span class="temper__desc">Medium</span>
+            </button>
+            <button class="temper__tile" data-temper="dread" role="radio" aria-checked="false">
+              <span class="temper__index">III</span>
+              <span class="temper__name">DREAD</span>
+              <span class="temper__desc">Hard</span>
+            </button>
+            <button class="temper__tile" data-temper="malice" role="radio" aria-checked="false">
+              <span class="temper__index">IV</span>
+              <span class="temper__name">MALICE</span>
+              <span class="temper__desc">Expert</span>
+            </button>
+          </div>
 
-    <button id="begin-btn" class="btn btn--primary btn--wide">BEGIN REFINEMENT</button>
-    <!-- Phase 4 entry: standalone Refinement Floor mini-game (additive) -->
-    <button id="floor-btn" class="btn btn--wide btn--ghost">ENTER THE REFINEMENT FLOOR</button>
+          <div class="intake__actions">
+            <button id="begin-btn" class="btn btn--primary btn--wide">BEGIN REFINEMENT</button>
+            <!-- Phase 4 entry: standalone Refinement Floor mini-game (additive) -->
+            <button id="floor-btn" class="btn btn--wide btn--ghost">ENTER THE REFINEMENT FLOOR</button>
+          </div>
 
-    <!-- Terminal command line -->
-    <div class="terminal">
-      <div class="terminal__log" id="terminal-log" aria-live="polite"></div>
-      <div class="terminal__inputline">
-        <span class="terminal__prompt">&gt;</span>
-        <input
-          id="terminal-input"
-          class="terminal__input"
-          type="text"
-          autocomplete="off"
-          autocapitalize="characters"
-          spellcheck="false"
-          aria-label="Command line"
-          placeholder="type a command — try HELP" />
-        <span class="terminal__cursor" aria-hidden="true"></span>
+          <!-- Terminal command line -->
+          <div class="terminal">
+            <div class="terminal__log" id="terminal-log" aria-live="polite"></div>
+            <div class="terminal__inputline">
+              <span class="terminal__prompt">&gt;</span>
+              <input
+                id="terminal-input"
+                class="terminal__input"
+                type="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                aria-label="Command line"
+                placeholder="type a command — try HELP" />
+              <span class="terminal__cursor" aria-hidden="true"></span>
+            </div>
+          </div>
+        </section>
       </div>
+
     </div>
-  </section>
+    <div class="crt__scan" aria-hidden="true"></div>
+    <div class="crt__vignette" aria-hidden="true"></div>
+  </div>
 </main>
 
 
 <!-- ====================================================== -->
 <!-- SCREEN B — REFINEMENT CONSOLE (the real tool)         -->
 <!-- ====================================================== -->
-<main id="screen-console" class="screen" aria-label="Refinement Console" hidden>
+<main id="screen-console" class="screen screen--monitor" aria-label="Refinement Console" hidden>
 
-  <header class="topbar topbar--console">
-    <div class="topbar__brand">
-      <svg class="brandmark brandmark--sm" viewBox="0 0 48 48" aria-hidden="true">
-        <circle cx="24" cy="24" r="22" class="bm-ring" />
-        <path class="bm-petal" d="M24 6 C30 14, 30 20, 24 24 C18 20, 18 14, 24 6 Z" />
-        <path class="bm-petal" d="M42 24 C34 30, 28 30, 24 24 C28 18, 34 18, 42 24 Z" />
-        <path class="bm-petal" d="M24 42 C18 34, 18 28, 24 24 C30 28, 30 34, 24 42 Z" />
-        <path class="bm-petal" d="M6 24 C14 18, 20 18, 24 24 C20 30, 14 30, 6 24 Z" />
-        <circle cx="24" cy="24" r="3" class="bm-core" />
+  <!-- utility controls live in the dark bezel, off the screen -->
+  <div class="bezel-controls">
+    <span class="topbar__state" id="solver-state">IDLE</span>
+    <button id="ambient-btn" class="iconbtn" aria-label="Toggle ambient hum" title="Ambient hum">≈</button>
+    <button id="mute-btn" class="iconbtn" aria-label="Toggle sound" title="Toggle sound">♪</button>
+    <button id="return-btn" class="btn btn--ghost btn--sm">RETURN TO INTAKE</button>
+  </div>
+
+  <div class="crt" id="console-crt">
+   <div class="crt__inner">
+
+    <!-- shared CRT header: globe mark + title + live progress tally -->
+    <div class="crt-head">
+      <svg class="crt-head__globe" viewBox="0 0 120 70" aria-hidden="true">
+        <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
+        <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
+        <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
+        <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
+        <path class="g-line" d="M16 19 Q60 31 104 19"></path>
+        <path class="g-line" d="M16 51 Q60 39 104 51"></path>
+        <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
       </svg>
-      <div class="topbar__title">
-        <span class="topbar__lumon">REFINEMENT CONSOLE</span>
-        <span class="topbar__dept">FILE&nbsp;<span id="file-temper-label">WOE</span></span>
+      <div class="crt-head__bar">
+        <span class="crt-head__name">MACRODATA REFINEMENT</span>
+        <span class="crt-head__tally" aria-hidden="true">
+          <span class="crt-head__tally-track"></span>
+          <span class="crt-head__tally-fill" id="console-tally-fill"></span>
+        </span>
+        <span class="crt-head__pct"><span id="stat-progress">0<small>%</small></span></span>
       </div>
     </div>
-    <div class="topbar__meta">
-      <span class="topbar__state" id="solver-state">IDLE</span>
-      <button id="ambient-btn" class="iconbtn" aria-label="Toggle ambient hum" title="Ambient hum">≈</button>
-      <button id="mute-btn" class="iconbtn" aria-label="Toggle sound" title="Toggle sound">♪</button>
-      <button id="return-btn" class="btn btn--ghost btn--sm">RETURN TO INTAKE</button>
-    </div>
-  </header>
 
-  <!-- Stats / quota strip -->
-  <section class="quota">
-    <div class="quota__cell">
-      <span class="quota__label">Files Refined</span>
-      <span class="quota__value" id="stat-files">0</span>
-    </div>
-    <div class="quota__cell">
-      <span class="quota__label">Refinement Accuracy</span>
-      <span class="quota__value" id="stat-accuracy">100<small>%</small></span>
-    </div>
-    <div class="quota__cell">
-      <span class="quota__label">Avg. Refinement Time</span>
-      <span class="quota__value" id="stat-avgtime">--:--</span>
-    </div>
-    <div class="quota__cell">
-      <span class="quota__label">Completion</span>
-      <span class="quota__value" id="stat-progress">0<small>%</small></span>
-    </div>
-  </section>
+    <!-- stacked body: grid → numpad → two-row toolbar -->
+    <div class="console-body">
 
-  <div class="console-body">
-
-    <!-- Left: grid -->
-    <section class="console-grid-wrap">
       <div class="grid-frame">
         <div id="sudoku-grid" class="sudoku-grid" role="grid" aria-label="Refinement grid"></div>
         <!-- solving sweep overlay -->
         <div class="grid-sweep" id="grid-sweep" aria-hidden="true"></div>
       </div>
 
-      <!-- Number pad -->
+      <!-- Number pad (single compact row) -->
       <div class="numpad" id="numpad" aria-label="Number pad">
         <button class="numpad__key" data-num="1">1</button>
         <button class="numpad__key" data-num="2">2</button>
@@ -177,70 +178,68 @@
         <button class="numpad__key" data-num="9">9</button>
         <button class="numpad__key numpad__key--erase" data-num="0">⌫</button>
       </div>
-    </section>
 
-    <!-- Right: controls -->
-    <aside class="console-side">
+      <!-- compact two-row toolbar -->
+      <div class="console-toolbar">
 
-      <div class="panel">
-        <div class="panel__title">PROTOCOL</div>
-        <div class="btn-stack">
+        <!-- row 1 — protocol actions -->
+        <div class="toolbar-row toolbar-row--protocol">
           <button id="refine-btn" class="btn btn--primary">REFINE FILE</button>
           <button id="check-btn" class="btn">CHECK</button>
           <button id="clear-btn" class="btn">CLEAR ENTRIES</button>
           <button id="new-btn" class="btn">NEW FILE</button>
         </div>
-      </div>
 
-      <div class="panel">
-        <div class="panel__title">MANUAL INTAKE</div>
-        <p class="panel__hint">Paste an 81-character file string. Use 0 or . for empty cells.</p>
-        <div class="paste-row">
+        <!-- row 2 — manual intake (default state) -->
+        <div class="toolbar-row toolbar-row--intake manual-default">
           <input id="paste-input" class="paste-input" type="text" spellcheck="false"
-                 autocomplete="off" placeholder="0530070000600195000098000060..." aria-label="Paste puzzle string" />
+                 autocomplete="off" placeholder="Paste 81-char file string — 0 or . for empty…" aria-label="Paste puzzle string" />
           <button id="paste-btn" class="btn btn--sm">LOAD</button>
+          <button id="scan-btn" class="btn btn--sm btn--ghost"
+                  title="Optical intake — import a puzzle from a photo">IMPORT ARTIFACT</button>
+          <button id="enter-manual-btn" class="btn btn--sm"
+                  title="Type the givens by hand into the console grid">ENTER MANUALLY</button>
+          <span class="paste-error" id="paste-error" role="alert"></span>
         </div>
-        <!-- Phase 3 hook: a SCAN intake path slots in alongside paste/generate -->
-        <button id="scan-btn" class="btn btn--sm btn--ghost btn--full"
-                title="Optical intake — import a puzzle from a photo">IMPORT EXTERNAL DATA ARTIFACT</button>
-        <div class="paste-error" id="paste-error" role="alert"></div>
+
+        <!-- row 2 — manual intake (edit/authoring state) -->
+        <div class="toolbar-row toolbar-row--intake manual-edit">
+          <span class="manual-clues" id="manual-clues-row">
+            <span>Givens</span>
+            <span><span id="manual-clues">0</span><span class="manual-clues__min"> / 17 min</span></span>
+          </span>
+          <button id="set-puzzle-btn" class="btn btn--sm btn--primary">SET PUZZLE</button>
+          <button id="cancel-manual-btn" class="btn btn--sm">CANCEL</button>
+          <span class="paste-error" id="manual-error" role="alert"></span>
+        </div>
       </div>
 
-      <div class="panel panel--meta">
-        <div class="panel__row"><span>Anomalies logged</span><span id="error-count">0</span></div>
-        <div class="panel__row"><span>Threshold</span><span id="error-threshold">5</span></div>
-      </div>
-    </aside>
+      <!-- bottom stats strip: 4 bordered cells (Floor-bin styling) -->
+      <section class="console-stats" aria-label="Refinement statistics">
+        <div class="cstat">
+          <span class="cstat__label">Files Refined</span>
+          <span class="cstat__value" id="stat-files">0</span>
+        </div>
+        <div class="cstat">
+          <span class="cstat__label">Refinement Accuracy</span>
+          <span class="cstat__value" id="stat-accuracy">100<small>%</small></span>
+        </div>
+        <div class="cstat">
+          <span class="cstat__label">Avg. Refinement Time</span>
+          <span class="cstat__value" id="stat-avgtime">--:--</span>
+        </div>
+        <div class="cstat">
+          <span class="cstat__label">Anomalies <span id="file-temper-label" hidden></span></span>
+          <span class="cstat__value"><span id="error-count">0</span><small> / <span id="error-threshold">5</span></small></span>
+        </div>
+      </section>
+
+    </div>
+
+   </div>
+   <div class="crt__scan" aria-hidden="true"></div>
+   <div class="crt__vignette" aria-hidden="true"></div>
   </div>
-
-  <!-- The five bins -->
-  <section class="bins" id="bins" aria-label="Refinement bins">
-    <div class="bin" data-bin="0">
-      <div class="bin__fill"></div>
-      <div class="bin__label"><span class="bin__code">01</span><span class="bin__name">CALCHAR</span></div>
-      <div class="bin__pct">0%</div>
-    </div>
-    <div class="bin" data-bin="1">
-      <div class="bin__fill"></div>
-      <div class="bin__label"><span class="bin__code">02</span><span class="bin__name">DRANESK</span></div>
-      <div class="bin__pct">0%</div>
-    </div>
-    <div class="bin" data-bin="2">
-      <div class="bin__fill"></div>
-      <div class="bin__label"><span class="bin__code">03</span><span class="bin__name">PELLNOR</span></div>
-      <div class="bin__pct">0%</div>
-    </div>
-    <div class="bin" data-bin="3">
-      <div class="bin__fill"></div>
-      <div class="bin__label"><span class="bin__code">04</span><span class="bin__name">SIENA</span></div>
-      <div class="bin__pct">0%</div>
-    </div>
-    <div class="bin" data-bin="4">
-      <div class="bin__fill"></div>
-      <div class="bin__label"><span class="bin__code">05</span><span class="bin__name">TUMWILT</span></div>
-      <div class="bin__pct">0%</div>
-    </div>
-  </section>
 </main>
 
 

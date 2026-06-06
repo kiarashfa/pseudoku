@@ -303,11 +303,22 @@ export const OpticalIntake = (function () {
     // cap working resolution for speed/memory on phones
     const MAXD = 1000;
     const scale = Math.min(1, MAXD / Math.max(img.width, img.height));
-    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const iw = Math.round(img.width * scale), ih = Math.round(img.height * scale);
+
+    // PAD with a white margin. Many sources (screenshots, tightly-cropped
+    // scans like a flush-to-edge printed grid) put the puzzle border right at
+    // the image edge. Without margin, the border merges with the frame and the
+    // quad detector locks onto the image rectangle instead of the true grid —
+    // which is exactly what stretches a flat puzzle horizontally on warp.
+    // A clean white gutter on all sides makes the grid a fully-enclosed contour.
+    const pad = Math.round(Math.max(iw, ih) * 0.06);
+    const w = iw + pad * 2, h = ih + pad * 2;
 
     const cnv = document.createElement("canvas");
     cnv.width = w; cnv.height = h;
-    cnv.getContext("2d").drawImage(img, 0, 0, w, h);
+    const cctx = cnv.getContext("2d");
+    cctx.fillStyle = "#fff"; cctx.fillRect(0, 0, w, h);
+    cctx.drawImage(img, pad, pad, iw, ih);
 
     const src = cv.imread(cnv);
     const gray = new cv.Mat(), blur = new cv.Mat(), thr = new cv.Mat();
@@ -325,7 +336,7 @@ export const OpticalIntake = (function () {
 
       cv.findContours(thr, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-      // pick the largest 4-corner-ish contour by area
+      // pick the largest near-square 4-corner contour by area
       let best = null, bestArea = 0;
       const imgArea = w * h;
       for (let i = 0; i < contours.size(); i++) {
@@ -336,23 +347,61 @@ export const OpticalIntake = (function () {
           const approx = new cv.Mat();
           cv.approxPolyDP(c, approx, 0.02 * peri, true);
           if (approx.rows === 4 && cv.isContourConvex(approx)) {
-            if (best) best.delete();
-            best = approx; bestArea = area;
+            // reject quads that aren't roughly square. A real grid is 1:1; a
+            // stretched/degenerate quad (e.g. one edge riding the frame) is not.
+            // Using the bounding rect of the 4 pts keeps this cheap.
+            const r = cv.boundingRect(approx);
+            const ar = r.width / Math.max(1, r.height);
+            if (ar > 0.7 && ar < 1.43) {
+              if (best) best.delete();
+              best = approx; bestArea = area;
+            } else approx.delete();
           } else approx.delete();
         }
         c.delete();
       }
       if (!best) return null;
 
-      const corners = orderCorners(best);
+      let corners = orderCorners(best);
       best.delete();
 
-      // side length from corner geometry
-      const side = Math.round(Math.max(
-        dist(corners[0], corners[1]), dist(corners[1], corners[2]),
-        dist(corners[2], corners[3]), dist(corners[3], corners[0])
-      ));
-      const S = Math.max(270, Math.min(900, side)); // clamp for sane cells
+      // sub-pixel corner refinement: snap each approx corner to the true
+      // grid corner using cornerSubPix on the grayscale image. This tightens
+      // the deskew on messy / slightly-bowed photos where approxPolyDP lands
+      // a few px off the real intersection.
+      try {
+        const cornMat = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          corners[0].x, corners[0].y, corners[1].x, corners[1].y,
+          corners[2].x, corners[2].y, corners[3].x, corners[3].y,
+        ]);
+        const winSize = new cv.Size(
+          Math.max(5, Math.round(Math.min(w, h) * 0.012)),
+          Math.max(5, Math.round(Math.min(w, h) * 0.012))
+        );
+        const zeroZone = new cv.Size(-1, -1);
+        const crit = new cv.TermCriteria(
+          cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 30, 0.01);
+        cv.cornerSubPix(gray, cornMat, winSize, zeroZone, crit);
+        const refined = [];
+        for (let i = 0; i < 4; i++) {
+          refined.push({ x: cornMat.data32F[i * 2], y: cornMat.data32F[i * 2 + 1] });
+        }
+        cornMat.delete();
+        // only trust refinement if it didn't fly off (stay within ~3% of frame)
+        const tol = Math.max(w, h) * 0.03;
+        const sane = refined.every((p, i) => dist(p, corners[i]) < tol);
+        if (sane) corners = refined;
+      } catch (e) { /* keep coarse corners on any failure */ }
+
+      // side length from corner geometry — average opposing edges so a skewed
+      // capture doesn't bias the square toward its longest side
+      const wTop = dist(corners[0], corners[1]);
+      const wBot = dist(corners[3], corners[2]);
+      const hLft = dist(corners[0], corners[3]);
+      const hRgt = dist(corners[1], corners[2]);
+      const side = Math.round(Math.max((wTop + wBot) / 2, (hLft + hRgt) / 2));
+      // bump the working square up: larger warp → bigger cells → sharper digits.
+      const S = Math.max(450, Math.min(1200, side)); // clamp for sane cells
 
       const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
         corners[0].x, corners[0].y, corners[1].x, corners[1].y,
@@ -363,9 +412,10 @@ export const OpticalIntake = (function () {
       ]);
       const M = cv.getPerspectiveTransform(srcTri, dstTri);
       warpMat = new cv.Mat();
-      // warp from grayscale for a clean digit surface
+      // warp from grayscale for a clean digit surface; cubic resampling keeps
+      // thin printed strokes crisp under the perspective transform
       cv.warpPerspective(gray, warpMat, M, new cv.Size(S, S),
-        cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255));
+        cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255));
 
       srcTri.delete(); dstTri.delete(); M.delete();
       return { warpMat, sideLen: S };
@@ -388,12 +438,21 @@ export const OpticalIntake = (function () {
   }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
-  /* ---- segment warped square into 81 cleaned cell canvases ---- */
+  /* ---- segment warped square into 81 cleaned cell canvases ----
+     Each cell yields:
+       - ink density (for the blank gate, measured on the cleaned digit mask)
+       - three normalized canvases (canA / canB / canC) for the vote:
+           canA: digit tight-cropped, centered, GENEROUS padding, upscaled
+           canB: same digit, slightly larger scale + thinner padding
+           canC: mid padding — tiebreaker pass
+     Pipeline per cell: crop with margin → hybrid binarize → remove grid
+     lines → keep the largest central blob → tight bbox → center on a
+     square canvas with white padding → upscale.                          */
   function segmentCells(warpMat, S) {
     const cv = window.cv;
     const step = S / 9;
-    const margin = Math.round(step * 0.12); // trim residual grid lines
-    const canvases = [], ink = [];
+    const margin = Math.round(step * 0.10); // trim residual grid lines
+    const canvases = [], canvasesB = [], canvasesC = [], ink = [];
 
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
@@ -406,44 +465,169 @@ export const OpticalIntake = (function () {
           Math.max(1, Math.min(cw, S - x0)), Math.max(1, Math.min(ch, S - y0))
         );
         const roi = warpMat.roi(rect);
-        const cell = new cv.Mat();
-        // binarize cell: Otsu inverse → white digit on black
-        cv.threshold(roi, cell, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
-        // ink density on a centered inner region (ignore stray border ink)
-        const ipad = Math.round(cell.rows * 0.16);
-        let inkCount = 0, total = 0;
-        for (let yy = ipad; yy < cell.rows - ipad; yy++) {
-          for (let xx = ipad; xx < cell.cols - ipad; xx++) {
-            total++;
-            if (cell.ucharPtr(yy, xx)[0] > 0) inkCount++;
-          }
-        }
-        const density = total ? inkCount / total : 0;
-        ink.push(density);
+        const result = cleanCell(roi); // { mask, density } mask = white digit on black
+        ink.push(result.density);
 
-        // export a padded, normalized canvas for the recognizer
-        const out = document.createElement("canvas");
-        out.width = 48; out.height = 48;
-        const octx = out.getContext("2d");
-        octx.fillStyle = "#fff"; octx.fillRect(0, 0, 48, 48); // recognizer wants dark-on-light
-        // draw the cell (white-on-black) inverted back to black-on-white, centered
-        const tmp = document.createElement("canvas");
-        tmp.width = cell.cols; tmp.height = cell.rows;
-        cv.imshow(tmp, cell); // white digit on black
-        // invert via globalCompositeOperation
-        octx.save();
-        octx.translate(6, 6);
-        const sw = 36, sh = 36;
-        octx.filter = "invert(1)";
-        octx.drawImage(tmp, 0, 0, sw, sh);
-        octx.restore();
-        canvases.push(out);
+        const { canA, canB, canC } = renderDigitCanvases(result.mask, result.bbox);
+        canvases.push(canA);
+        canvasesB.push(canB);
+        canvasesC.push(canC);
 
-        roi.delete(); cell.delete();
+        result.mask.delete();
+        roi.delete();
       }
     }
-    return { canvases, ink };
+    return { canvases, canvasesB, canvasesC, ink };
+  }
+
+  /* ---- per-cell cleaning: binarize, strip grid lines, isolate digit ----
+     Returns a white-digit-on-black mask, the digit bounding box (or null),
+     and an ink density measured on that mask's central region.            */
+  function cleanCell(roi) {
+    const cv = window.cv;
+    const work = new cv.Mat();
+    // upsample the small cell first so thin strokes survive thresholding
+    const TARGET = 90;
+    cv.resize(roi, work, new cv.Size(TARGET, TARGET), 0, 0, cv.INTER_CUBIC);
+    // gentle denoise without smearing strokes
+    cv.GaussianBlur(work, work, new cv.Size(3, 3), 0);
+
+    // --- hybrid binarization: adaptive (handles uneven light) AND'd with a
+    //     global Otsu (kills broad shadows the adaptive pass leaves behind) ---
+    const adapt = new cv.Mat(), otsu = new cv.Mat(), bin = new cv.Mat();
+    cv.adaptiveThreshold(work, adapt, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      cv.THRESH_BINARY_INV, 19, 8);
+    cv.threshold(work, otsu, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+    cv.bitwise_and(adapt, otsu, bin); // white = ink, black = paper
+    adapt.delete(); otsu.delete(); work.delete();
+
+    // --- aggressive grid-line removal -------------------------------------
+    // Long thin horizontal / vertical runs are border remnants, not digits.
+    // Build line masks with 1-D structuring elements sized to the cell, then
+    // subtract them — but ONLY in the border bands. A printed "9" tail (and the
+    // strokes of 1/4/7) can run near-vertically across much of the cell; if we
+    // subtract full-cell lines everywhere we clip those tails and the 9 reads
+    // as 0/blank. Grid-line remnants, by contrast, hug the cell edges (the crop
+    // already trimmed most of them). So we detect long runs, then erase the
+    // detection inside the central digit box before subtracting.
+    const span = bin.cols;
+    const horK = cv.getStructuringElement(cv.MORPH_RECT,
+      new cv.Size(Math.max(10, Math.round(span * 0.80)), 1));
+    const verK = cv.getStructuringElement(cv.MORPH_RECT,
+      new cv.Size(1, Math.max(10, Math.round(span * 0.80))));
+    const hor = new cv.Mat(), ver = new cv.Mat(), lines = new cv.Mat();
+    cv.morphologyEx(bin, hor, cv.MORPH_OPEN, horK);
+    cv.morphologyEx(bin, ver, cv.MORPH_OPEN, verK);
+    cv.add(hor, ver, lines);
+    // dilate detected lines slightly to cover their full thickness
+    const lineDil = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(2, 2));
+    cv.dilate(lines, lines, lineDil);
+    // protect the centre: blank the line mask inside the inner digit region so
+    // we never subtract a stroke that passes through where the glyph lives
+    const band = Math.round(span * 0.18); // border band width on each side
+    const innerRect = new cv.Rect(band, band,
+      Math.max(1, bin.cols - band * 2), Math.max(1, bin.rows - band * 2));
+    const innerROI = lines.roi(innerRect);
+    innerROI.setTo(new cv.Scalar(0));
+    innerROI.delete();
+    cv.subtract(bin, lines, bin);
+    horK.delete(); verK.delete(); hor.delete(); ver.delete();
+    lines.delete(); lineDil.delete();
+
+    // repair small breaks the line subtraction may have caused
+    const closeK = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
+    cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, closeK);
+    // strip salt noise
+    cv.morphologyEx(bin, bin, cv.MORPH_OPEN, closeK);
+    closeK.delete();
+
+    // --- keep only the largest blob whose centroid is near the cell centre.
+    //     Border crumbs and neighbouring-cell bleed get dropped.            ---
+    const labels = new cv.Mat(), stats = new cv.Mat(), centroids = new cv.Mat();
+    const n = cv.connectedComponentsWithStats(bin, labels, stats, centroids, 8, cv.CV_32S);
+    const cx = bin.cols / 2, cy = bin.rows / 2;
+    const maxR = bin.cols * 0.42; // centroid must sit within this of centre
+    let bestLabel = -1, bestArea = 0, bbox = null;
+    const minArea = (bin.cols * bin.rows) * 0.012;
+    const maxArea = (bin.cols * bin.rows) * 0.85;
+    for (let l = 1; l < n; l++) {
+      const area = stats.intAt(l, cv.CC_STAT_AREA);
+      if (area < minArea || area > maxArea) continue;
+      const ccx = centroids.doubleAt(l, 0), ccy = centroids.doubleAt(l, 1);
+      if (Math.hypot(ccx - cx, ccy - cy) > maxR) continue;
+      if (area > bestArea) {
+        bestArea = area; bestLabel = l;
+        bbox = {
+          x: stats.intAt(l, cv.CC_STAT_LEFT),
+          y: stats.intAt(l, cv.CC_STAT_TOP),
+          w: stats.intAt(l, cv.CC_STAT_WIDTH),
+          h: stats.intAt(l, cv.CC_STAT_HEIGHT),
+        };
+      }
+    }
+
+    // build the cleaned mask = only the winning blob (white on black)
+    const mask = cv.Mat.zeros(bin.rows, bin.cols, cv.CV_8U);
+    if (bestLabel >= 0) {
+      for (let yy = bbox.y; yy < bbox.y + bbox.h; yy++) {
+        for (let xx = bbox.x; xx < bbox.x + bbox.w; xx++) {
+          if (labels.intAt(yy, xx) === bestLabel) mask.ucharPtr(yy, xx)[0] = 255;
+        }
+      }
+    }
+    labels.delete(); stats.delete(); centroids.delete(); bin.delete();
+
+    // density of the kept blob over the whole cell — the blank gate reads this
+    const density = bestArea / (mask.rows * mask.cols);
+    return { mask, density, bbox: bestLabel >= 0 ? bbox : null };
+  }
+
+  /* ---- render the cleaned mask into two normalized recognizer canvases ----
+     Both are black digit on white. We tight-crop to the bbox, center it on a
+     square, add generous white padding, and upscale — Tesseract reads a big,
+     centered, well-margined glyph far better than a raw cell crop.          */
+  function renderDigitCanvases(mask, bbox) {
+    const cv = window.cv;
+    const OUT = 64; // final canvas is OUT×OUT, upscaled from the small mask
+
+    function make(padFrac, scaleFrac) {
+      const out = document.createElement("canvas");
+      out.width = OUT; out.height = OUT;
+      const octx = out.getContext("2d");
+      octx.fillStyle = "#fff"; octx.fillRect(0, 0, OUT, OUT); // white paper
+      if (!bbox) return out; // blank cell → leave white
+
+      // crop the digit out of the mask
+      const crop = mask.roi(new cv.Rect(bbox.x, bbox.y, bbox.w, bbox.h));
+      const tmp = document.createElement("canvas");
+      tmp.width = bbox.w; tmp.height = bbox.h;
+      cv.imshow(tmp, crop); // white digit on black
+      crop.delete();
+
+      // scale the digit so its longer side fills scaleFrac of the inner box
+      const inner = OUT * scaleFrac;
+      const s = inner / Math.max(bbox.w, bbox.h);
+      const dw = Math.max(1, Math.round(bbox.w * s));
+      const dh = Math.max(1, Math.round(bbox.h * s));
+      const dx = Math.round((OUT - dw) / 2);
+      const dy = Math.round((OUT - dh) / 2);
+
+      // draw inverted (black digit on the white canvas), centered, with the
+      // padding implied by scaleFrac < 1
+      octx.save();
+      octx.imageSmoothingEnabled = true;
+      octx.filter = "invert(1)";
+      octx.drawImage(tmp, dx, dy, dw, dh);
+      octx.restore();
+      void padFrac; // padding is expressed through scaleFrac; kept for clarity
+      return out;
+    }
+
+    // Pass A: generous padding (digit fills ~58% of the box → big white margin)
+    // Pass B: tighter, larger glyph (~74%) — a second opinion for the vote
+    // Pass C: mid padding (~66%) — tiebreaker, often rescues a clipped 9
+    return { canA: make(0.42, 0.58), canB: make(0.26, 0.74), canC: make(0.34, 0.66) };
   }
 
   function matToObjectURL(mat) {
@@ -460,7 +644,21 @@ export const OpticalIntake = (function () {
      CV/segmentation/review code.
      ===================================================== */
   const Recognizer = (function () {
-    const INK_BLANK = 0.022; // below this density → treat as empty cell
+    const INK_BLANK = 0.010; // mask blob density below this → empty cell
+
+    // recognize one canvas, return { digit, conf } (conf 0..1)
+    async function readOne(worker, canvas) {
+      try {
+        const res = await worker.recognize(canvas);
+        const raw = (res.data.text || "").replace(/[^1-9]/g, "");
+        const digit = raw ? Number(raw[0]) : 0;
+        let cf = (res.data.confidence != null ? res.data.confidence : 0) / 100;
+        if (cf < 0) cf = 0; if (cf > 1) cf = 1;
+        return { digit, conf: cf };
+      } catch (e) {
+        return { digit: 0, conf: 0 };
+      }
+    }
 
     async function classifyCells(seg, onProgress) {
       const worker = await ensureWorker();
@@ -471,17 +669,45 @@ export const OpticalIntake = (function () {
         if (seg.ink[i] < INK_BLANK) {
           values[i] = 0; conf[i] = 1;        // confidently blank
         } else {
-          try {
-            const res = await worker.recognize(seg.canvases[i]);
-            const raw = (res.data.text || "").replace(/[^1-9]/g, "");
-            const digit = raw ? Number(raw[0]) : 0;
-            // Tesseract confidence 0..100 → 0..1; low ink-but-no-digit = uncertain
-            let cf = (res.data.confidence != null ? res.data.confidence : 0) / 100;
-            if (!digit) { values[i] = 0; conf[i] = Math.min(cf, 0.4); }
-            else { values[i] = digit; conf[i] = cf; }
-          } catch (e) {
-            values[i] = 0; conf[i] = 0.0;     // force review
+          // --- three-pass vote: read all normalized variants of the cell ---
+          const reads = [
+            await readOne(worker, seg.canvases[i]),
+            await readOne(worker, seg.canvasesB[i]),
+            await readOne(worker, seg.canvasesC[i]),
+          ];
+
+          // tally digits across passes, weighted by confidence
+          const tally = {}; // digit → { count, confSum, confMax }
+          for (const r of reads) {
+            if (!r.digit) continue;
+            const t = tally[r.digit] || (tally[r.digit] = { count: 0, confSum: 0, confMax: 0 });
+            t.count++; t.confSum += r.conf; t.confMax = Math.max(t.confMax, r.conf);
           }
+
+          let digit = 0, cf = 0;
+          const entries = Object.keys(tally);
+          if (entries.length === 0) {
+            // INK present (blank gate already passed) but no pass read a digit.
+            // This is the classic clipped-9 / odd-glyph case — never silently
+            // drop it. Surface it for mandatory review at zero confidence.
+            digit = 0; cf = 0;
+          } else {
+            // pick the digit with the most votes; break ties by summed conf
+            entries.sort((x, y) => {
+              const dx = tally[x], dy = tally[y];
+              if (dy.count !== dx.count) return dy.count - dx.count;
+              return dy.confSum - dx.confSum;
+            });
+            digit = Number(entries[0]);
+            const t = tally[digit];
+            if (t.count === 3)      cf = Math.min(1, t.confMax + 0.15); // unanimous
+            else if (t.count === 2) cf = Math.min(0.9, t.confMax + 0.05); // majority
+            else                    cf = Math.min(0.5, t.confMax); // plurality → review
+          }
+
+          values[i] = digit;
+          // a detected-ink cell that produced no digit must go to review
+          conf[i] = digit ? cf : 0;
         }
         if (onProgress) onProgress(i + 1);
       }

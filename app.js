@@ -161,6 +161,7 @@ const App = (function () {
 
   function goIntake() {
     const intake = $("#screen-intake"), con = $("#screen-console");
+    if (Console.isEditing && Console.isEditing()) Console.cancelEdit();
     con.classList.remove("screen--active");
     Corporate.stopIdle();
     setTimeout(() => {

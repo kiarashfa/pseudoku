@@ -5,7 +5,7 @@
    tightly coupled to the Console and to one another.
    ============================================================ */
 import {
-  TEMPERS, ERROR_THRESHOLD,
+  TEMPERS, ERROR_THRESHOLD, FALLBACK,
   $, $$, fmtTime, toast,
   SudokuEngine, Store, Sound, Corporate, Interstitial,
   getEmployeeId, randomFileCode,
@@ -21,6 +21,7 @@ export const Console = (function () {
   let errorCount = 0;
   let startTime = null;
   let solverState = "idle"; // idle | refining | solved | failed
+  let editMode = false;     // manual-entry intake: typing givens into a blank grid
 
   /* ---- build the grid DOM once ---- */
   function buildGrid() {
@@ -54,6 +55,7 @@ export const Console = (function () {
     selected = -1;
     errorCount = 0;
     startTime = Date.now();
+    if (editMode) exitEdit(true);
     setSolverState("idle");
     persist();
     render();
@@ -78,7 +80,7 @@ export const Console = (function () {
     $("#file-temper-label").textContent = conf.label;
     let result;
     try {
-      result = SudokuEngine.generate(conf.clues);
+      result = SudokuEngine.generate(temper); // generate-rate-accept toward target temper
     } catch (e) { result = null; }
     if (!result) {
       const fb = FALLBACK[temper] || FALLBACK.woe;
@@ -108,6 +110,19 @@ export const Console = (function () {
   /* ---- entry ---- */
   function enter(v) {
     if (solverState === "refining") return;
+
+    // MANUAL INTAKE: author givens directly into the blank grid.
+    // No solution/anomaly tracking — conflicts are surfaced live in render(),
+    // full validation happens at SET PUZZLE.
+    if (editMode) {
+      if (selected < 0) return;
+      grid[selected] = v;            // v === 0 clears
+      Sound.key();
+      render();                       // no persist mid-edit: an authored,
+      updateEditState();             // unvalidated grid must not be restorable
+      return;
+    }
+
     if (selected < 0 || givenMask[selected]) return;
     Corporate.resetIdle();
     if (v === 0) {
@@ -151,7 +166,9 @@ export const Console = (function () {
       const v = grid[i];
       cell.textContent = v === 0 ? "" : v;
       cell.className = "cell";
-      if (givenMask[i]) cell.classList.add("cell--given");
+      if (editMode) {
+        if (v !== 0) cell.classList.add("cell--editgiven");
+      } else if (givenMask[i]) cell.classList.add("cell--given");
       else if (v !== 0) cell.classList.add("cell--entered");
 
       const r = Math.floor(i / 9), c = i % 9;
@@ -180,6 +197,10 @@ export const Console = (function () {
     $("#stat-files").textContent = Store.get("filesRefined");
     $("#stat-progress").innerHTML = pct + "<small>%</small>";
 
+    // drive the header progress tally (mirrors the Floor's completion bar)
+    const tally = $("#console-tally-fill");
+    if (tally) tally.style.width = pct + "%";
+
     // accuracy = correct entries / total entries attempted
     const entered = grid.filter((v, i) => !givenMask[i] && v !== 0).length;
     const correctEntered = grid.filter((v, i) => !givenMask[i] && v !== 0 && v === solution[i]).length;
@@ -190,12 +211,12 @@ export const Console = (function () {
     const avg = files > 0 ? Store.get("totalTimeMs") / files : 0;
     $("#stat-avgtime").textContent = fmtTime(avg);
 
-    // anomaly panel
+    // anomaly readout — now a bottom stat cell
     $("#error-count").textContent = errorCount;
-    const row = $("#error-count").closest(".panel__row");
-    if (row) row.classList.toggle("is-warn", errorCount >= ERROR_THRESHOLD);
+    const aCell = $("#error-count").closest(".cstat");
+    if (aCell) aCell.classList.toggle("is-warn", errorCount >= ERROR_THRESHOLD);
 
-    // bins fill proportionally to completion (5 bins, 81 cells)
+    // bins were retired from the console; this loop is a safe no-op if absent
     const bins = $$("#bins .bin");
     const perBin = 81 / bins.length;
     bins.forEach((bin, idx) => {
@@ -269,7 +290,7 @@ export const Console = (function () {
 
   /* ---- REFINE FILE: auto-solve with ceremony ---- */
   function refine() {
-    if (solverState === "refining") return;
+    if (solverState === "refining" || editMode) return;
     const work = grid.slice();
     // Lock current givens+entries as constraints; solve the rest.
     if (!SudokuEngine.solve(work)) {
@@ -309,6 +330,7 @@ export const Console = (function () {
 
   /* ---- CHECK ---- */
   function check() {
+    if (editMode) return;
     const conflicts = SudokuEngine.findConflicts(grid);
     render();
     if (conflicts.size > 0) {
@@ -323,11 +345,122 @@ export const Console = (function () {
 
   /* ---- CLEAR user entries (keep givens) ---- */
   function clearEntries() {
+    if (editMode) {
+      // in edit mode CLEAR ENTRIES wipes the authored grid back to blank
+      grid = new Array(81).fill(0);
+      selected = -1;
+      render(); updateEditState();
+      const errEl = $("#manual-error"); if (errEl) errEl.textContent = "";
+      toast("GRID CLEARED");
+      return;
+    }
     for (let i = 0; i < 81; i++) if (!givenMask[i]) grid[i] = 0;
     errorCount = 0;
     setSolverState("idle");
     persist(); render(); updateStats();
     toast("ENTRIES CLEARED");
+  }
+
+  /* =====================================================
+     MANUAL INTAKE — type givens into a blank grid, then
+     SET PUZZLE validates + locks them via the shared
+     acceptance path (loadPuzzle), exactly like OCR review.
+     ===================================================== */
+  function enterEdit() {
+    if (solverState === "refining") return;
+    editMode = true;
+    grid = new Array(81).fill(0);
+    givenMask = new Array(81).fill(false);
+    solution = new Array(81).fill(0);
+    selected = -1;
+    errorCount = 0;
+    setSolverState("idle");
+    document.body.classList.add("is-editing");
+    const errEl = $("#manual-error");
+    if (errEl) errEl.textContent = "";
+    render();
+    updateStats();
+    updateEditState();
+    select(0);
+    toast("MANUAL INTAKE — TYPE THE GIVENS, THEN SET PUZZLE");
+    Sound.select();
+  }
+
+  // exit edit mode. accepted=true when a puzzle was set (loadPuzzle drives
+  // the real state); accepted=false cancels back to an empty idle console.
+  function exitEdit(accepted) {
+    editMode = false;
+    document.body.classList.remove("is-editing");
+    const errEl = $("#manual-error");
+    if (errEl) errEl.textContent = "";
+    if (!accepted) {
+      grid = new Array(81).fill(0);
+      givenMask = new Array(81).fill(false);
+      solution = new Array(81).fill(0);
+      selected = -1;
+      setSolverState("idle");
+      render();
+      updateStats();
+    }
+    updateEditState();
+  }
+
+  function cancelEdit() {
+    if (!editMode) return;
+    exitEdit(false);
+    toast("MANUAL INTAKE CANCELLED");
+    Sound.select();
+  }
+
+  // live readout of clue count + button enable state while authoring
+  function updateEditState() {
+    const setBtn = $("#set-puzzle-btn");
+    const clueEl = $("#manual-clues");
+    const clues = grid.filter((v) => v !== 0).length;
+    if (clueEl) clueEl.textContent = clues;
+    if (setBtn) setBtn.disabled = !editMode;
+    // refresh the live clue gauge if present
+    const gauge = $("#manual-clues-row");
+    if (gauge) gauge.classList.toggle("is-short", clues < 17);
+  }
+
+  function setPuzzle() {
+    if (!editMode) return;
+    const errEl = $("#manual-error");
+    const fail = (msg) => { if (errEl) errEl.textContent = msg; Sound.err(); };
+
+    // 1) no structural conflicts
+    const conflicts = SudokuEngine.findConflicts(grid);
+    if (conflicts.size > 0) {
+      render();
+      fail("FILE CONTAINS ANOMALIES — DUPLICATE NUMERALS DETECTED.");
+      return;
+    }
+    // 2) enough clues (17 is the known minimum for a unique Sudoku)
+    const clues = grid.filter((v) => v !== 0).length;
+    if (clues < 17) {
+      fail("INSUFFICIENT NUMERIC CONTENT — REQUIRE AT LEAST 17 GIVENS.");
+      return;
+    }
+    // 3) exactly one solution
+    if (!SudokuEngine.hasUniqueSolution(grid)) {
+      const test = grid.slice();
+      fail(SudokuEngine.solve(test)
+        ? "FILE IS NON-COMPLIANT — SOLUTION IS NOT UNIQUE."
+        : "FILE IS UNREFINABLE — NO VALID SOLUTION EXISTS.");
+      return;
+    }
+
+    // accept → same path as paste / OCR review: lock filled cells as givens
+    if (errEl) errEl.textContent = "";
+    Sound.ok();
+    const puzzleStr = SudokuEngine.toString(grid);
+    Interstitial.show("FILE ACCEPTED");
+    setTimeout(() => {
+      loadPuzzle(puzzleStr);            // exitEdit(true) runs inside loadPuzzle
+      toast("FILE LOADED FOR REFINEMENT");
+      Corporate && Corporate.friendly && Corporate.friendly();
+    }, 520);
   }
 
   /* ---- paste loader ---- */
@@ -340,13 +473,17 @@ export const Console = (function () {
       Sound.err();
       return false;
     }
-    // verify solvable
-    const test = parsed.slice();
-    if (!SudokuEngine.solve(test)) {
-      errEl.textContent = "FILE IS UNREFINABLE — NO VALID SOLUTION EXISTS.";
+    // verify exactly one solution (mirrors the manual-entry intake check)
+    if (!SudokuEngine.hasUniqueSolution(parsed)) {
+      const test = parsed.slice();
+      errEl.textContent = SudokuEngine.solve(test)
+        ? "FILE IS NON-COMPLIANT — SOLUTION IS NOT UNIQUE."
+        : "FILE IS UNREFINABLE — NO VALID SOLUTION EXISTS.";
       Sound.err();
       return false;
     }
+    const test = parsed.slice();
+    SudokuEngine.solve(test);
     loadPuzzle(SudokuEngine.toString(parsed), SudokuEngine.toString(test));
     toast("FILE LOADED FOR REFINEMENT");
     Sound.ok();
@@ -381,6 +518,13 @@ export const Console = (function () {
     $("#paste-input").addEventListener("keydown", (e) => {
       if (e.key === "Enter") loadFromString($("#paste-input").value);
     });
+    // Manual intake — author givens directly in the console grid.
+    const enterBtn = $("#enter-manual-btn");
+    if (enterBtn) enterBtn.addEventListener("click", enterEdit);
+    const setBtn = $("#set-puzzle-btn");
+    if (setBtn) setBtn.addEventListener("click", setPuzzle);
+    const cancelBtn = $("#cancel-manual-btn");
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelEdit);
     // PHASE3: optical intake — import a puzzle from a photo.
     const scanBtn = $("#scan-btn");
     if (scanBtn) {
@@ -392,6 +536,7 @@ export const Console = (function () {
   return {
     init, newPuzzle, restore, loadFromString, refine, check,
     clearEntries, select, move, enter, getErrorCount,
+    enterEdit, setPuzzle, cancelEdit, isEditing: () => editMode,
   };
 })();
 
