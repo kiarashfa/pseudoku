@@ -243,6 +243,26 @@ body { position: relative; }
   max-height: 116px; overflow-y: auto; margin-bottom: 8px;
   white-space: pre-wrap; word-break: break-word;
 }
+
+/* themed scrollbar — Firefox */
+.terminal__log {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan-deep) transparent;
+}
+/* themed scrollbar — WebKit (Chrome/Safari/Edge) */
+.terminal__log::-webkit-scrollbar { width: 8px; }
+.terminal__log::-webkit-scrollbar-track {
+  background: transparent;
+}
+.terminal__log::-webkit-scrollbar-thumb {
+  background: var(--cyan-deep);
+  border-radius: 0;                /* keep it boxy like the rest of the UI */
+  box-shadow: 0 0 6px rgba(127,223,255,.4);
+}
+.terminal__log::-webkit-scrollbar-thumb:hover {
+  background: var(--cyan-dim);
+}
+
 .terminal__log:empty { margin-bottom: 0; }
 .terminal__log .t-cmd  { color: var(--cyan); }
 .terminal__log .t-ok   { color: var(--glow); }
@@ -295,8 +315,33 @@ body { position: relative; }
    not shrinkable, so it needs honest measurement instead.) */
 .console-body {
   flex: 0 0 auto; min-height: 0;
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: clamp(8px, 1.4vh, 16px);
+}
+
+/* main split: grid column (left) beside the control panel (right).
+   align-items:flex-start keeps both columns pinned to the top so the grid and
+   the first button row share a baseline. */
+.console-main {
+  flex: 0 0 auto; min-height: 0;
+  display: flex; align-items: flex-start; justify-content: center;
+  gap: clamp(14px, 2vw, 28px);
+}
+/* left column hugs the grid width; numpad sits directly under the grid */
+.console-left {
+  flex: 0 0 auto;
   display: flex; flex-direction: column; align-items: center;
   gap: clamp(6px, 1vh, 12px);
+}
+/* right column — the control panel. Fills the remaining width up to a
+   sensible cap so the buttons read as a tidy stacked panel, not a sprawl. */
+.console-right {
+  flex: 1 1 auto; min-width: 0; max-width: 340px;
+  align-self: stretch;
+  display: flex; flex-direction: column;
+  gap: clamp(10px, 1.4vh, 16px);
+  border-left: 2px solid var(--line);
+  padding-left: clamp(14px, 2vw, 28px);
 }
 
 /* Grid — sized off viewport height so the body fills the CRT with no gap.
@@ -312,7 +357,7 @@ body { position: relative; }
      box, so the grid no longer needs a vh term (the old min(38vh,…) made the
      grid huge on short-but-wide 16:9 windows, which is what overran the footer
      before honest measurement was in place). */
-  --size: min(56vw, 412px);
+  --size: min(56vw, 449px);
   width: var(--size); height: var(--size);
   display: grid;
   grid-template-columns: repeat(9, 1fr);
@@ -382,90 +427,104 @@ body { position: relative; }
 .numpad__key:active { transform: translateY(1px); }
 .numpad__key--erase { color: var(--text-dim); }
 
-/* ---- compact toolbar ---- */
-.console-toolbar {
-  flex: none; width: 100%; max-width: 760px;
-  display: flex; flex-direction: column; gap: clamp(6px, 1vh, 9px);
+/* ============================================================
+   CONTROL PANEL — the right-side column beside the grid.
+   Buttons stack into labelled groups, each separated by a hairline
+   divider so the panel reads as a tidy instrument cluster.
+   ============================================================ */
+.ctl-group {
+  display: flex; flex-direction: column; gap: 8px;
 }
-.toolbar-row {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  align-items: center; justify-content: center;
+/* a faint divider above each group (echoes the header rule). The drawer's
+   inner wrapper also gets one so manage/custom stay visually separated. */
+.console-right > .ctl-group + .ctl-group,
+.console-right > .protocol-drawer + .ctl-group,
+.console-right > .ctl-group + .protocol-drawer,
+.protocol-drawer__inner > .ctl-group + .ctl-group {
+  padding-top: clamp(10px, 1.4vh, 16px);
+  border-top: 1px solid var(--line);
 }
-.toolbar-row--protocol .btn { flex: 1 1 auto; min-width: 120px; }
-/* primary refinement line: REFINE + CHECK are the main actions; PROTOCOLS is
-   the drawer toggle and stays compact at the end so it reads as secondary. */
-.toolbar-row--primary .btn { flex: 1 1 auto; min-width: 140px; }
-.toolbar-row--primary .drawer-toggle { flex: 0 1 auto; min-width: 0; }
+.ctl-group__heading {
+  font-family: var(--sans); font-size: 9px; font-weight: 700;
+  letter-spacing: .26em; text-transform: uppercase;
+  color: var(--cyan-dim); margin-bottom: 2px;
+}
 
-/* ---- PROTOCOLS drawer (collapsible secondary actions) ----
-   Collapsed by default so the console focuses on the grid; expanding it shows
-   file/session management + the import row. Toggling [hidden] mutates the DOM,
-   so the Fit scaler's MutationObserver re-fits automatically. */
-.drawer-toggle {
-  display: inline-flex; align-items: center; gap: 8px;
-  color: var(--text-dim); border-color: var(--line-strong);
+/* primary actions: REFINE + CHECK share a row, REFINE leads */
+.ctl-group--primary {
+  flex-direction: row; gap: 8px;
 }
-.drawer-toggle:hover { color: var(--cyan); }
-.drawer-toggle__chev {
-  font-size: .9em; line-height: 1; transition: transform .22s var(--ease);
-  color: var(--cyan-dim);
-}
-.drawer-toggle[aria-expanded="true"] { color: var(--cyan); border-color: var(--cyan-deep); }
-.drawer-toggle[aria-expanded="true"] .drawer-toggle__chev { transform: rotate(90deg); }
+.ctl-group--primary .btn { flex: 1 1 auto; min-width: 0; }
+.ctl-group--primary #refine-btn { flex: 2 1 0; }
+/* the PROTOCOLS drawer toggle is a MOBILE-only affordance — hidden on desktop,
+   where the drawer contents are simply always shown */
+.drawer-toggle { display: none; }
 
-.toolbar-drawer {
-  display: flex; flex-direction: column; gap: clamp(6px, 1vh, 9px);
-  width: 100%;
-  padding: clamp(8px, 1.2vh, 12px) clamp(8px, 1.4vw, 14px);
-  border: 1px solid var(--line); background: rgba(8,14,20,.5);
-}
-.toolbar-drawer[hidden] { display: none; }
+/* a reusable two-up button grid (manage actions + custom intake actions) */
+.ctl-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ctl-grid2 .btn { width: 100%; min-width: 0; }
 
-/* management line inside the drawer: buttons share width evenly; RESET! keeps
-   a small fixed separation (not margin-left:auto, which flung it to the edge) */
-.toolbar-row--manage { gap: 8px; }
-.toolbar-row--manage .btn { flex: 1 1 auto; min-width: 0; }
-.toolbar-row--manage .toolbar-row__end {
-  flex: 0 1 auto;            /* RESET! stays compact, doesn't stretch */
-  margin-left: clamp(6px, 1.2vw, 16px);
+/* ---- the PROTOCOLS drawer ----
+   DESKTOP: a plain block, always open (no animation, no toggle).
+   MOBILE: an animated push-down drawer (grid-template-rows 0fr→1fr) — it
+   expands the layout and pushes siblings down, then rolls back, with NO
+   scaling of the readout. */
+.protocol-drawer { display: block; }
+.protocol-drawer__inner {
+  display: flex; flex-direction: column; gap: clamp(10px, 1.4vh, 16px);
 }
-.toolbar-row--intake { width: 100%; }
-.toolbar-row--intake .paste-input {
-  flex: 1 1 200px; min-width: 0;
+
+/* intake group */
+.ctl-paste { display: flex; gap: 8px; }
+.ctl-paste .paste-input {
+  flex: 1 1 auto; min-width: 0;
   background: var(--bg-cell); border: 1px solid var(--line-strong);
   color: var(--glow); font-family: var(--mono); font-size: 11px;
   padding: 9px 11px; outline: none; letter-spacing: .04em;
 }
-.toolbar-row--intake .paste-input:focus { border-color: var(--cyan); }
-.toolbar-row--intake .paste-input::placeholder { color: var(--text-faint); }
-.toolbar-row .paste-error {
-  flex: 1 0 100%; text-align: center;
+.ctl-paste .paste-input:focus { border-color: var(--cyan); }
+.ctl-paste .paste-input::placeholder { color: var(--text-faint); }
+.ctl-paste .btn { flex: 0 0 auto; }
+.intake-default, .intake-edit { display: flex; flex-direction: column; gap: 8px; }
+.ctl-group--intake .paste-error {
   font-size: 10px; color: var(--danger-glow); min-height: 0; letter-spacing: .05em;
+  text-align: center;
 }
-.toolbar-row .paste-error:empty { display: none; }
+.ctl-group--intake .paste-error:empty { display: none; }
 
-/* row 3 — temper selector relocated from intake. Four equal tiles, made as
-   short as possible (no Roman numeral, name + descriptor on one line) so the
-   row reclaims vertical space and the stats strip + footer never collide. */
-.toolbar-row--temper {
-  width: 100%; flex-wrap: nowrap; gap: 8px;
-}
-.toolbar-row--temper .temper__tile {
-  flex: 1 1 0; min-width: 0;
-  flex-direction: row; flex-wrap: wrap; justify-content: center;
-  align-items: baseline; gap: 2px 7px;
-  padding: 7px 8px;
-}
-.toolbar-row--temper .temper__index { display: none; } /* drop the Greek numeral */
-.toolbar-row--temper .temper__name { font-size: 12px; letter-spacing: .12em; }
-.toolbar-row--temper .temper__desc { font-size: 9px; letter-spacing: .1em; }
-/* temper is meaningless while authoring givens — dim it like the protocol row */
-body.is-editing .toolbar-row--temper { opacity: .4; pointer-events: none; filter: saturate(.4); }
-
-/* manual-intake state swap (rows, not panels) */
+/* manual-intake state swap */
 .manual-edit { display: none; }
 body.is-editing .manual-default { display: none; }
 body.is-editing .manual-edit { display: flex; }
+body.is-editing .ctl-group--manage { opacity: .4; pointer-events: none; filter: saturate(.4); }
+
+/* temper selector — four tiles in one row inside the panel */
+.toolbar-row--temper {
+  width: 100%; display: flex; flex-wrap: nowrap; gap: 6px;
+}
+.toolbar-row--temper .temper__tile {
+  flex: 1 1 0; min-width: 0;
+  flex-direction: column; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 1px;
+  padding: 7px 4px;
+}
+.toolbar-row--temper .temper__index { display: none; } /* drop the Greek numeral */
+.toolbar-row--temper .temper__name { font-size: 11px; letter-spacing: .1em; }
+.toolbar-row--temper .temper__desc { font-size: 8px; letter-spacing: .08em; }
+/* temper is meaningless while authoring givens — dim it */
+body.is-editing .ctl-group--temper { opacity: .4; pointer-events: none; filter: saturate(.4); }
+
+/* ---- numpad inside the panel (DESKTOP) ----
+   Two rows: 1–5 on top, 6–9 + erase on the bottom. (The base .numpad rule
+   further down still defines the key look; here we just re-grid it.) */
+.ctl-group--numpad .numpad {
+  width: 100%;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: clamp(5px, 0.5vw, 8px);
+}
+
+.ctl-group--numpad .numpad__key { aspect-ratio: auto; height: 28px; }
+
 .manual-clues {
   display: inline-flex; gap: 8px; align-items: baseline;
   font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
@@ -481,8 +540,6 @@ body.is-editing .manual-edit { display: flex; }
   text-shadow: 0 0 8px rgba(127,223,255,.5);
   background: #0e2030;
 }
-/* while authoring, the protocol row is not applicable — dim + block it */
-body.is-editing .toolbar-row--protocol { opacity: .4; pointer-events: none; filter: saturate(.4); }
 /* a quiet "EDITING" cue on the header title */
 body.is-editing .crt-head__name::after {
   content: " · EDITING"; color: var(--cyan); opacity: .85;
@@ -978,13 +1035,99 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
       0 16px 40px rgba(0,0,0,.6), inset 0 0 90px rgba(0,0,0,.5);
   }
   .crt__inner { padding: 14px 16px 10px; }
+  /* On mobile the console must NOT scale to fit — opening the PROTOCOLS drawer
+     should push the layout down and, if it runs past the glass, scroll inside
+     the CRT (like the About page). So we cancel the Fit scaler's transform here
+     and let the readout scroll vertically. */
+  #console-crt .crt__fit {
+    transform: scale(1.012);
+    overflow-y: auto; overflow-x: hidden;
+    justify-content: flex-start;
+    -webkit-overflow-scrolling: touch;
+  }
   .console-body { gap: clamp(8px, 1.4vh, 16px); }
   .crt-head { padding-bottom: 12px; margin-bottom: 14px; }
   .crt-head__dept { display: none; }
-  /* grid/numpad size off the box now; the scaler does the final fit so we can
-     let these run a touch larger without fear of overflow */
-  .sudoku-grid, .numpad { --size: min(82vw, 460px); width: min(82vw, 460px); }
-  .console-toolbar { max-width: min(94vw, 520px); }
+  .sudoku-grid { --size: min(82vw, 460px); width: min(82vw, 460px); }
+
+  /* ---- console folds to ONE column on narrow screens ----
+     The right "panel" stops being a side rail and becomes a normal stacked
+     block. Order on the shared column: grid → numpad → primary actions (with
+     the PROTOCOLS toggle) → the push-down drawer (manage + custom) → temper.
+     Full-width labelled buttons, no icon-only mode. */
+  .console-main { flex-direction: column; align-items: center; gap: clamp(10px, 1.6vh, 18px); }
+  .console-left { width: 100%; align-items: center; order: 0; }
+  .console-right {
+    width: 100%; max-width: min(86vw, 480px); align-self: center;
+    display: flex; flex-direction: column; gap: clamp(10px, 1.6vh, 16px);
+  }
+
+  /* numpad jumps OUT of its desktop position (after temper) to sit directly
+     under the grid — it becomes the first thing in the right column, and goes
+     back to a single 10-key row */
+  .ctl-group--numpad { order: 1; }
+  .ctl-group--numpad .numpad {
+    grid-template-columns: repeat(10, 1fr);
+    width: 100%;
+  }
+  .ctl-group--numpad .ctl-group__heading { display: none; }
+
+  .ctl-group--primary { order: 2; }
+  .protocol-drawer    { order: 3; }
+  .ctl-group--temper  { order: 4; }
+
+  /* dividers/headings are noise once the panel is a plain stack — drop the
+     inter-group borders and the ENTRIES/PROTOCOLS/CUSTOM/TEMPER labels EXCEPT
+     keep the drawer's own internal structure tidy */
+  .console-right > .ctl-group + .ctl-group,
+  .console-right > .protocol-drawer + .ctl-group,
+  .console-right > .ctl-group + .protocol-drawer { border-top: none; padding-top: 0; }
+  .console-right > .ctl-group--temper > .ctl-group__heading { display: none; }
+
+  /* PROTOCOLS toggle becomes visible and joins the primary row */
+  .drawer-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    flex: 1 1 100%; justify-content: center;
+    color: var(--text-dim); border-color: var(--line-strong);
+  }
+  .drawer-toggle:hover { color: var(--cyan); }
+  .drawer-toggle__chev {
+    font-size: .9em; line-height: 1; transition: transform .25s var(--ease);
+    color: var(--cyan-dim);
+  }
+  .drawer-toggle[aria-expanded="true"] { color: var(--cyan); border-color: var(--cyan-deep); }
+  .drawer-toggle[aria-expanded="true"] .drawer-toggle__chev { transform: rotate(90deg); }
+  /* primary row wraps so REFINE + CHECK share the top line and PROTOCOLS sits
+     full-width beneath them */
+  .ctl-group--primary { flex-wrap: wrap; gap: 8px; }
+  .ctl-group--primary .btn:not(.drawer-toggle) {
+    flex: 1 1 calc(50% - 4px); min-width: 0; white-space: nowrap;
+  }
+  .drawer-toggle { flex: 1 1 100% !important; }
+
+  /* ---- the REAL push-down drawer ----
+     A grid whose single row animates from 0fr (collapsed) to 1fr (open). The
+     inner wrapper has overflow:hidden so content is clipped while rolling, and
+     min-height:0 lets the 0fr row actually collapse. This expands the layout
+     and pushes the temper + stats DOWN — no transform, no scaling. */
+  .protocol-drawer {
+    display: grid; grid-template-rows: 0fr;
+    transition: grid-template-rows .32s var(--ease);
+  }
+  .protocol-drawer.is-open { grid-template-rows: 1fr; }
+  .protocol-drawer__inner {
+    overflow: hidden; min-height: 0;
+    /* a hairline frame so the open drawer reads as a distinct tray */
+    gap: clamp(10px, 1.6vh, 16px);
+  }
+  /* pad only when open so the collapsed state is truly flush/zero-height */
+  .protocol-drawer.is-open .protocol-drawer__inner {
+    padding-top: clamp(10px, 1.4vh, 14px);
+    margin-top: 2px; border-top: 1px solid var(--line);
+  }
+  /* keep the group dividers/headings inside the drawer (they aid scanning) */
+  .protocol-drawer .ctl-group__heading { display: block; }
+
   .bezel-controls {
     position: absolute; top: 12px; right: 12px;
     width: auto; max-width: none; margin: 0;
@@ -1000,7 +1143,6 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   .cstat__label { font-size: 8px; letter-spacing: .1em; }
   .cstat__value { font-size: 16px; }
   .crt-head__name { font-size: 13px; }
-  .toolbar-row--protocol .btn { min-width: 0; flex: 1 1 40%; }
   .crt-foot { font-size: 9px; letter-spacing: .1em; gap: 6px; }
   .ctrlbtn__glyph { font-size: 16px; }
   .modal__panel { padding: 20px; }
@@ -1313,6 +1455,11 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 .crt__fit[data-fit="none"] {
   transform: scale(1.012);
 }
+/* The console pins its readout to the TOP of the glass (not vertically
+   centered) so the header sits at the same height as the Floor's "Cold
+   Harbour" header — no big empty band above the title box. The scaler still
+   shrinks from here if the content would overflow. */
+#console-crt .crt__fit { justify-content: flex-start; }
 
 /* scanlines (above content) */
 .crt__scan {

@@ -171,6 +171,7 @@ const Terminal = (function () {
         write("  FILE — receive a fresh file designation", "t-sys");
         write("  CATECHISM — a word from Kier", "t-sys");
         write("  CLEAR — purge the log · HELP — this list", "t-sys");
+        write(" ");
         write("Some words carry meaning. Lumon watches.", "t-sys");
         return;
       case "CLEAR":
@@ -693,28 +694,29 @@ const App = (function () {
     const resetBtn = $("#reset-btn");
     if (resetBtn) resetBtn.addEventListener("click", () => { Sound.select(); ResetConfirm.open(); });
 
-    // PROTOCOLS drawer — collapses the secondary console actions so the screen
-    // stays focused on the grid. Toggling [hidden] also lets the Fit scaler
-    // re-measure (less content ⇒ less/no shrink, bigger grid).
+    // PROTOCOLS drawer — a mobile-only collapsible tray holding the management
+    // actions + custom intake. On desktop the toggle is hidden via CSS and the
+    // drawer is always shown, so this wiring is harmless there. The open state
+    // is a CSS class (.is-open) that animates grid-template-rows 0fr→1fr, which
+    // pushes the temper + stats down (no scaling) and rolls back on close.
     (function wireDrawer() {
       const toggle = $("#drawer-toggle");
       const drawer = $("#protocol-drawer");
       if (!toggle || !drawer) return;
       function setOpen(open) {
-        drawer.hidden = !open;
+        drawer.classList.toggle("is-open", open);
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
-        Fit.schedule();
       }
       toggle.addEventListener("click", () => {
         Sound.select();
-        setOpen(drawer.hidden); // hidden ⇒ open it
+        setOpen(!drawer.classList.contains("is-open"));
       });
       // Authoring (ENTER MANUALLY → body.is-editing) needs the drawer open so
-      // SET PUZZLE / CANCEL are reachable; force it open and keep it open while
-      // editing. Decoupled from sudoku.js via a body-class observer.
+      // SET PUZZLE / CANCEL are reachable; force it open while editing.
       if (typeof MutationObserver === "function") {
         new MutationObserver(() => {
-          if (document.body.classList.contains("is-editing") && drawer.hidden) {
+          if (document.body.classList.contains("is-editing") &&
+              !drawer.classList.contains("is-open")) {
             setOpen(true);
           }
         }).observe(document.body, { attributes: true, attributeFilter: ["class"] });

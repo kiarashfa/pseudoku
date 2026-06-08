@@ -965,13 +965,13 @@ export const RefinementReport = (function () {
 
     doc.setTextColor(207, 232, 245);
     doc.setFont("courier", "bold"); doc.setFontSize(20);
-    doc.text("REFINEMENT REPORT", cx, 110, { align: "center" });
+    doc.text("REFINEMENT REPORT", cx, 90, { align: "center" });
     doc.setFontSize(9); doc.setTextColor(127, 223, 255);
     doc.setFont("helvetica", "normal");
-    doc.text("LUMON INDUSTRIES  ·  MACRODATA REFINEMENT  ·  LIFETIME RECORD", cx, 132, { align: "center" });
+    doc.text("LUMON INDUSTRIES  ·  MACRODATA REFINEMENT  ·  LIFETIME RECORD", cx, 112, { align: "center" });
 
     doc.setDrawColor(46, 85, 107);
-    doc.line(80, 156, W - 80, 156);
+    doc.line(80, 130, W - 80, 130);
 
     // Featured awardee line when a name is registered — makes the certificate
     // feel addressed to the person. The badge still appears in the rows below.
@@ -980,12 +980,12 @@ export const RefinementReport = (function () {
     if (d.hasName) {
       doc.setFont("helvetica", "normal"); doc.setFontSize(9);
       doc.setTextColor(93, 126, 142);
-      doc.text("PRESENTED TO", cx, 184, { align: "center" });
+      doc.text("PRESENTED TO", cx, 160, { align: "center" });
       doc.setFont("courier", "bold"); doc.setFontSize(17);
       doc.setTextColor(207, 232, 245);
-      doc.text(d.refinedBy, cx, 208, { align: "center" });
-      doc.setDrawColor(46, 85, 107); doc.line(140, 226, W - 140, 226);
-      y = 262;
+      doc.text(d.refinedBy, cx, 180, { align: "center" });
+      doc.setDrawColor(46, 85, 107); doc.line(140, 195, W - 140, 195);
+      y = 230;
       rows = rows.filter(([k]) => k !== "Refined By"); // already featured above
     }
 
@@ -1012,7 +1012,7 @@ export const RefinementReport = (function () {
     const left = 90;
     const right = W - 90;
     const numCols = 4;                  // FILES, ACC, BEST, AVG
-    const span = right - (left + 50);   // reserve room after the TEMPER label
+    const span = right - (left + 90);   // reserve room after the TEMPER label
     const anchors = [];
     for (let i = 0; i < numCols; i++) {
       anchors.push(right - (numCols - 1 - i) * (span / (numCols - 1)));
@@ -1045,7 +1045,7 @@ export const RefinementReport = (function () {
     doc.setFont("helvetica", "italic"); doc.setFontSize(8);
     doc.setTextColor(74, 158, 186);
     doc.text("This document affirms compliance. It confers no rights, benefits, or waffles.",
-      cx, H - 70, { align: "center" });
+      cx, H - 92, { align: "center" });
 
     doc.save("Refinement_Report_" + d.employeeId.replace(/[^A-Z0-9]/gi, "") + ".pdf");
     Sound.ok();

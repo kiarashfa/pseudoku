@@ -143,38 +143,31 @@
       <!-- solver-state chip relocated to the footer -->
     </div>
 
-    <!-- stacked body: grid → numpad → two-row toolbar -->
+    <!-- Console body. DESKTOP: grid (left) beside a control panel (right);
+         numpad + temper live in the right panel; stats span full width below.
+         MOBILE: everything stacks — grid, numpad, two primary actions, a real
+         push-down PROTOCOLS drawer (manage + custom intake), temper, stats. -->
     <div class="console-body">
 
-      <div class="grid-frame">
-        <div id="sudoku-grid" class="sudoku-grid" role="grid" aria-label="Refinement grid"></div>
-        <!-- solving sweep overlay -->
-        <div class="grid-sweep" id="grid-sweep" aria-hidden="true"></div>
+     <div class="console-main">
+
+      <!-- the grid -->
+      <div class="console-left">
+        <div class="grid-frame">
+          <div id="sudoku-grid" class="sudoku-grid" role="grid" aria-label="Refinement grid"></div>
+          <!-- solving sweep overlay -->
+          <div class="grid-sweep" id="grid-sweep" aria-hidden="true"></div>
+        </div>
       </div>
 
-      <!-- Number pad (single compact row) -->
-      <div class="numpad" id="numpad" aria-label="Number pad">
-        <button class="numpad__key" data-num="1">1</button>
-        <button class="numpad__key" data-num="2">2</button>
-        <button class="numpad__key" data-num="3">3</button>
-        <button class="numpad__key" data-num="4">4</button>
-        <button class="numpad__key" data-num="5">5</button>
-        <button class="numpad__key" data-num="6">6</button>
-        <button class="numpad__key" data-num="7">7</button>
-        <button class="numpad__key" data-num="8">8</button>
-        <button class="numpad__key" data-num="9">9</button>
-        <button class="numpad__key numpad__key--erase" data-num="0">⌫</button>
-      </div>
+      <!-- control panel -->
+      <div class="console-right" aria-label="Refinement controls">
 
-      <!-- compact toolbar: primary actions + temper stay visible; the
-           secondary protocols + file-intake live in a collapsible drawer so
-           the console stays focused on the grid -->
-      <div class="console-toolbar">
-
-        <!-- primary refinement actions (always visible) -->
-        <div class="toolbar-row toolbar-row--protocol toolbar-row--primary">
+        <!-- primary refinement actions (always visible on both layouts) -->
+        <div class="ctl-group ctl-group--primary">
           <button id="refine-btn" class="btn btn--primary">REFINE FILE</button>
           <button id="check-btn" class="btn">CHECK</button>
+          <!-- drawer toggle: only shown on mobile (hidden on desktop via CSS) -->
           <button class="btn drawer-toggle" id="drawer-toggle" type="button"
                   aria-expanded="false" aria-controls="protocol-drawer"
                   title="Protocols: new file, clear, import, report, reset">
@@ -182,66 +175,108 @@
           </button>
         </div>
 
-        <!-- collapsible drawer: file / session management + intake -->
-        <div class="toolbar-drawer" id="protocol-drawer" role="group"
-             aria-label="Protocols" hidden>
+        <!-- collapsible PROTOCOLS drawer: manage + custom intake.
+             Desktop → always open. Mobile → animated push-down via .is-open. -->
+        <div class="protocol-drawer" id="protocol-drawer" role="group" aria-label="Protocols">
+         <div class="protocol-drawer__inner">
 
-          <!-- secondary file / session management -->
-          <div class="toolbar-row toolbar-row--protocol toolbar-row--manage">
-            <button id="new-btn" class="btn btn--sm">NEW FILE</button>
-            <button id="clear-btn" class="btn btn--sm">CLEAR ENTRIES</button>
-            <button id="report-btn" class="btn btn--sm">REFINEMENT REPORT</button>
-            <button id="reset-btn" class="btn btn--sm btn--danger toolbar-row__end">RESET!</button>
+          <!-- file / session management -->
+          <div class="ctl-group ctl-group--manage">
+            <span class="ctl-group__heading">PROTOCOLS</span>
+            <div class="ctl-grid2">
+              <button id="new-btn" class="btn btn--sm">NEW FILE</button>
+              <button id="clear-btn" class="btn btn--sm">CLEAR ENTRIES</button>
+              <button id="report-btn" class="btn btn--sm">REFINEMENT REPORT</button>
+              <button id="reset-btn" class="btn btn--sm btn--danger">RESET!</button>
+            </div>
           </div>
 
-          <!-- manual intake (default state) -->
-          <div class="toolbar-row toolbar-row--intake manual-default">
-            <input id="paste-input" class="paste-input" type="text" spellcheck="false"
-                   autocomplete="off" placeholder="Paste 81-char file string — 0 or . for empty…" aria-label="Paste puzzle string" />
-            <button id="paste-btn" class="btn btn--sm">LOAD</button>
-            <button id="scan-btn" class="btn btn--sm btn--ghost"
-                    title="Optical intake — import a puzzle from a photo">IMPORT ARTIFACT</button>
-            <button id="enter-manual-btn" class="btn btn--sm"
-                    title="Type the givens by hand into the console grid">ENTER MANUALLY</button>
-            <span class="paste-error" id="paste-error" role="alert"></span>
+          <!-- custom file intake (paste / import / manual) -->
+          <div class="ctl-group ctl-group--intake">
+            <span class="ctl-group__heading">CUSTOM</span>
+
+            <!-- default intake state -->
+            <div class="intake-default manual-default">
+              <div class="ctl-paste">
+                <input id="paste-input" class="paste-input" type="text" spellcheck="false"
+                       autocomplete="off" placeholder="Paste 81-char file string — 0 or . for empty…" aria-label="Paste puzzle string" />
+                <button id="paste-btn" class="btn btn--sm">LOAD</button>
+              </div>
+              <div class="ctl-grid2">
+                <button id="scan-btn" class="btn btn--sm btn--ghost"
+                        title="Optical intake — import a puzzle from a photo">IMPORT ARTIFACT</button>
+                <button id="enter-manual-btn" class="btn btn--sm"
+                        title="Type the givens by hand into the console grid">ENTER MANUALLY</button>
+              </div>
+              <span class="paste-error" id="paste-error" role="alert"></span>
+            </div>
+
+            <!-- authoring (edit) state -->
+            <div class="intake-edit manual-edit">
+              <span class="manual-clues" id="manual-clues-row">
+                <span>Givens</span>
+                <span><span id="manual-clues">0</span><span class="manual-clues__min"> / 17 min</span></span>
+              </span>
+              <div class="ctl-grid2">
+                <button id="set-puzzle-btn" class="btn btn--sm btn--primary">SET PUZZLE</button>
+                <button id="cancel-manual-btn" class="btn btn--sm">CANCEL</button>
+              </div>
+              <span class="paste-error" id="manual-error" role="alert"></span>
+            </div>
           </div>
 
-          <!-- manual intake (edit/authoring state) -->
-          <div class="toolbar-row toolbar-row--intake manual-edit">
-            <span class="manual-clues" id="manual-clues-row">
-              <span>Givens</span>
-              <span><span id="manual-clues">0</span><span class="manual-clues__min"> / 17 min</span></span>
-            </span>
-            <button id="set-puzzle-btn" class="btn btn--sm btn--primary">SET PUZZLE</button>
-            <button id="cancel-manual-btn" class="btn btn--sm">CANCEL</button>
-            <span class="paste-error" id="manual-error" role="alert"></span>
-          </div>
-        </div>
+         </div><!-- /.protocol-drawer__inner -->
+        </div><!-- /.protocol-drawer -->
 
         <!-- temper (difficulty) selector — always visible -->
-        <div class="toolbar-row toolbar-row--temper" role="radiogroup" aria-label="Temper selection">
-          <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
-            <span class="temper__index">I</span>
-            <span class="temper__name">WOE</span>
-            <span class="temper__desc">Easy</span>
-          </button>
-          <button class="temper__tile" data-temper="frolic" role="radio" aria-checked="false">
-            <span class="temper__index">II</span>
-            <span class="temper__name">FROLIC</span>
-            <span class="temper__desc">Medium</span>
-          </button>
-          <button class="temper__tile" data-temper="dread" role="radio" aria-checked="false">
-            <span class="temper__index">III</span>
-            <span class="temper__name">DREAD</span>
-            <span class="temper__desc">Hard</span>
-          </button>
-          <button class="temper__tile" data-temper="malice" role="radio" aria-checked="false">
-            <span class="temper__index">IV</span>
-            <span class="temper__name">MALICE</span>
-            <span class="temper__desc">Expert</span>
-          </button>
+        <div class="ctl-group ctl-group--temper">
+          <span class="ctl-group__heading">TEMPER</span>
+          <div class="toolbar-row toolbar-row--temper" role="radiogroup" aria-label="Temper selection">
+            <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
+              <span class="temper__index">I</span>
+              <span class="temper__name">WOE</span>
+              <span class="temper__desc">Easy</span>
+            </button>
+            <button class="temper__tile" data-temper="frolic" role="radio" aria-checked="false">
+              <span class="temper__index">II</span>
+              <span class="temper__name">FROLIC</span>
+              <span class="temper__desc">Medium</span>
+            </button>
+            <button class="temper__tile" data-temper="dread" role="radio" aria-checked="false">
+              <span class="temper__index">III</span>
+              <span class="temper__name">DREAD</span>
+              <span class="temper__desc">Hard</span>
+            </button>
+            <button class="temper__tile" data-temper="malice" role="radio" aria-checked="false">
+              <span class="temper__index">IV</span>
+              <span class="temper__name">MALICE</span>
+              <span class="temper__desc">Expert</span>
+            </button>
+          </div>
         </div>
-      </div>
+
+        <!-- Number pad. DESKTOP: two rows inside the panel, below temper, under
+             its own separator. MOBILE: a single 10-key row pulled up under the
+             grid (via flex order). -->
+        <div class="ctl-group ctl-group--numpad">
+          <span class="ctl-group__heading">ENTRIES</span>
+          <div class="numpad" id="numpad" aria-label="Number pad">
+            <button class="numpad__key" data-num="1">1</button>
+            <button class="numpad__key" data-num="2">2</button>
+            <button class="numpad__key" data-num="3">3</button>
+            <button class="numpad__key" data-num="4">4</button>
+            <button class="numpad__key" data-num="5">5</button>
+            <button class="numpad__key" data-num="6">6</button>
+            <button class="numpad__key" data-num="7">7</button>
+            <button class="numpad__key" data-num="8">8</button>
+            <button class="numpad__key" data-num="9">9</button>
+            <button class="numpad__key numpad__key--erase" data-num="0">⌫</button>
+          </div>
+        </div>
+
+      </div><!-- /.console-right -->
+
+     </div><!-- /.console-main -->
 
       <!-- bottom stats strip: 4 bordered cells (Floor-bin styling) -->
       <section class="console-stats" aria-label="Refinement statistics">
