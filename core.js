@@ -622,10 +622,15 @@ export const Store = (function () {
     givenMask: null,   // 81-char "1"/"0"
     filesRefined: 0,
     totalTimeMs: 0,    // for avg time
+    bestTimeMs: 0,        // lifetime fastest single refinement (0 = none yet)
+    accSum: 0,            // sum of per-file accuracy %, for lifetime mean
+    // per-temper lifetime ledger: { files, accSum, totalTimeMs, bestTimeMs }
+    temperStats: { woe: null, frolic: null, dread: null, malice: null },
     muted: false,
     ambient: false,    // low hum toggle
     screen: "intake",
     employeeId: null,  // persisted MDR-#### badge
+    displayName: null, // optional self-registered name for certificates
     waffleUnlocked: false,
     floorFilesComplete: 0, // Phase 4: refinement-floor files completed
   };
@@ -853,6 +858,22 @@ export function getEmployeeId() {
   }
   return id;
 }
+
+// Optional self-registered name. Sanitized: trimmed, control chars stripped,
+// collapsed whitespace, capped at 40 chars. Returns the stored name or null.
+export function setDisplayName(raw) {
+  const clean = String(raw || "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  Store.set({ displayName: clean || null });
+  return clean || null;
+}
+export function getDisplayName() { return Store.get("displayName") || null; }
+// Name when set, otherwise the badge — so certificates always render.
+export function getRefinerName() { return getDisplayName() || getEmployeeId(); }
+
 export function randomFileCode() {
   const L = "ABCDEFGHJKLMNPRSTUVWXY";
   return (10 + Math.floor(Math.random() * 89)) +

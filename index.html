@@ -24,6 +24,7 @@
 
   <div class="crt" id="intake-crt">
     <div class="crt__inner">
+     <div class="crt__fit" data-fit="scale">
 
       <!-- shared header: globe mark + title -->
       <div class="crt-head">
@@ -56,8 +57,8 @@
           <p class="intake__sub">The work is mysterious and important.</p>
 
           <div class="intake__actions">
-            <button id="begin-btn" class="btn btn--primary btn--wide">BEGIN REFINEMENT</button>
-            <!-- Phase 4 entry: standalone Refinement Floor mini-game (additive) -->
+            <button id="begin-btn" class="btn btn--primary btn--wide">BEGIN THE SOLVER CONSOLE</button>
+            <!-- standalone Refinement Floor mini-game (additive) -->
             <button id="floor-btn" class="btn btn--wide btn--ghost">ENTER THE REFINEMENT FLOOR</button>
             <!-- About page entry (third action; fills the space the temper grid left) -->
             <button id="about-btn" class="btn btn--wide btn--ghost">ABOUT THIS PROJECT</button>
@@ -89,6 +90,7 @@
         <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
       </div>
 
+     </div>
     </div>
     <div class="crt__scan" aria-hidden="true"></div>
     <div class="crt__vignette" aria-hidden="true"></div>
@@ -103,6 +105,7 @@
 
   <div class="crt" id="console-crt">
    <div class="crt__inner">
+    <div class="crt__fit" data-fit="scale">
 
     <!-- shared CRT header: globe mark + title + live progress tally -->
     <div class="crt-head">
@@ -163,42 +166,59 @@
         <button class="numpad__key numpad__key--erase" data-num="0">⌫</button>
       </div>
 
-      <!-- compact two-row toolbar -->
+      <!-- compact toolbar: primary actions + temper stay visible; the
+           secondary protocols + file-intake live in a collapsible drawer so
+           the console stays focused on the grid -->
       <div class="console-toolbar">
 
-        <!-- row 1 — protocol actions -->
-        <div class="toolbar-row toolbar-row--protocol">
-          <button id="new-btn" class="btn">NEW FILE</button>
-          <button id="check-btn" class="btn">CHECK</button>
-          <button id="clear-btn" class="btn">CLEAR ENTRIES</button>
+        <!-- primary refinement actions (always visible) -->
+        <div class="toolbar-row toolbar-row--protocol toolbar-row--primary">
           <button id="refine-btn" class="btn btn--primary">REFINE FILE</button>
-          <button id="reset-btn" class="btn btn--danger">RESET!</button>
+          <button id="check-btn" class="btn">CHECK</button>
+          <button class="btn drawer-toggle" id="drawer-toggle" type="button"
+                  aria-expanded="false" aria-controls="protocol-drawer"
+                  title="Protocols: new file, clear, import, report, reset">
+            PROTOCOLS<span class="drawer-toggle__chev" aria-hidden="true">▸</span>
+          </button>
         </div>
 
-        <!-- row 2 — manual intake (default state) -->
-        <div class="toolbar-row toolbar-row--intake manual-default">
-          <input id="paste-input" class="paste-input" type="text" spellcheck="false"
-                 autocomplete="off" placeholder="Paste 81-char file string — 0 or . for empty…" aria-label="Paste puzzle string" />
-          <button id="paste-btn" class="btn btn--sm">LOAD</button>
-          <button id="scan-btn" class="btn btn--sm btn--ghost"
-                  title="Optical intake — import a puzzle from a photo">IMPORT ARTIFACT</button>
-          <button id="enter-manual-btn" class="btn btn--sm"
-                  title="Type the givens by hand into the console grid">ENTER MANUALLY</button>
-          <span class="paste-error" id="paste-error" role="alert"></span>
+        <!-- collapsible drawer: file / session management + intake -->
+        <div class="toolbar-drawer" id="protocol-drawer" role="group"
+             aria-label="Protocols" hidden>
+
+          <!-- secondary file / session management -->
+          <div class="toolbar-row toolbar-row--protocol toolbar-row--manage">
+            <button id="new-btn" class="btn btn--sm">NEW FILE</button>
+            <button id="clear-btn" class="btn btn--sm">CLEAR ENTRIES</button>
+            <button id="report-btn" class="btn btn--sm">REFINEMENT REPORT</button>
+            <button id="reset-btn" class="btn btn--sm btn--danger toolbar-row__end">RESET!</button>
+          </div>
+
+          <!-- manual intake (default state) -->
+          <div class="toolbar-row toolbar-row--intake manual-default">
+            <input id="paste-input" class="paste-input" type="text" spellcheck="false"
+                   autocomplete="off" placeholder="Paste 81-char file string — 0 or . for empty…" aria-label="Paste puzzle string" />
+            <button id="paste-btn" class="btn btn--sm">LOAD</button>
+            <button id="scan-btn" class="btn btn--sm btn--ghost"
+                    title="Optical intake — import a puzzle from a photo">IMPORT ARTIFACT</button>
+            <button id="enter-manual-btn" class="btn btn--sm"
+                    title="Type the givens by hand into the console grid">ENTER MANUALLY</button>
+            <span class="paste-error" id="paste-error" role="alert"></span>
+          </div>
+
+          <!-- manual intake (edit/authoring state) -->
+          <div class="toolbar-row toolbar-row--intake manual-edit">
+            <span class="manual-clues" id="manual-clues-row">
+              <span>Givens</span>
+              <span><span id="manual-clues">0</span><span class="manual-clues__min"> / 17 min</span></span>
+            </span>
+            <button id="set-puzzle-btn" class="btn btn--sm btn--primary">SET PUZZLE</button>
+            <button id="cancel-manual-btn" class="btn btn--sm">CANCEL</button>
+            <span class="paste-error" id="manual-error" role="alert"></span>
+          </div>
         </div>
 
-        <!-- row 2 — manual intake (edit/authoring state) -->
-        <div class="toolbar-row toolbar-row--intake manual-edit">
-          <span class="manual-clues" id="manual-clues-row">
-            <span>Givens</span>
-            <span><span id="manual-clues">0</span><span class="manual-clues__min"> / 17 min</span></span>
-          </span>
-          <button id="set-puzzle-btn" class="btn btn--sm btn--primary">SET PUZZLE</button>
-          <button id="cancel-manual-btn" class="btn btn--sm">CANCEL</button>
-          <span class="paste-error" id="manual-error" role="alert"></span>
-        </div>
-
-        <!-- row 3 — temper (difficulty) selector, relocated from intake -->
+        <!-- temper (difficulty) selector — always visible -->
         <div class="toolbar-row toolbar-row--temper" role="radiogroup" aria-label="Temper selection">
           <button class="temper__tile temper__tile--active" data-temper="woe" role="radio" aria-checked="true">
             <span class="temper__index">I</span>
@@ -256,6 +276,7 @@
     </div>
 
    </div>
+   </div>
    <div class="crt__scan" aria-hidden="true"></div>
    <div class="crt__vignette" aria-hidden="true"></div>
   </div>
@@ -272,6 +293,7 @@
   <!-- the CRT screen -->
   <div class="crt" id="floor-crt">
     <div class="crt__inner">
+     <div class="crt__fit" data-fit="none">
 
       <!-- header readout -->
       <div class="floor-head">
@@ -323,6 +345,7 @@
         <span class="crt-foot__hex"><span id="floor-hex-a">0x000000</span> : <span id="floor-hex-b">0x000000</span></span>
         <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
       </div>
+     </div>
     </div>
     <div class="crt__scan" aria-hidden="true"></div>
     <div class="crt__vignette" aria-hidden="true"></div>
@@ -338,6 +361,7 @@
 
   <div class="crt" id="about-crt">
     <div class="crt__inner">
+     <div class="crt__fit" data-fit="scroll">
 
       <!-- shared CRT header: globe mark + title + return control -->
       <div class="crt-head">
@@ -425,9 +449,6 @@
   </div>
 </div>
 
-        </div>
-      </div>
-
       <!-- shared footer: time · paired hex code · department -->
       <div class="crt-foot">
         <span class="crt-foot__time" id="about-clock">--:--:--</span>
@@ -435,6 +456,7 @@
         <span class="crt-foot__dept">DEPT&nbsp;MDR-01</span>
       </div>
 
+     </div>
     </div>
     <div class="crt__scan" aria-hidden="true"></div>
     <div class="crt__vignette" aria-hidden="true"></div>

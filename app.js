@@ -16,9 +16,10 @@
      floor.js   Refinement Floor mini-game
    ============================================================ */
 import {
-  CATECHISMS,
-  $, $$,
+  CATECHISMS, TEMPERS,
+  $, $$, fmtTime,
   Store, Sound, Corporate, Field, Interstitial,
+  getEmployeeId, randomFileCode, setDisplayName, getDisplayName,
 } from "./core.js";
 import { Console, WaffleParty, Reveals } from "./sudoku.js";
 import { RefinementFloor } from "./floor.js";
@@ -68,25 +69,141 @@ const Terminal = (function () {
     },
   };
 
+  // Navigation directives map onto the existing intake buttons and route
+  // through the App state machine. Synonyms share a destination.
+  function nav(label, fn) {
+    write("Initiating refinement protocol...", "t-ok");
+    Sound.ok();
+    setTimeout(fn, 500);
+  }
+
+  // --- Useful / characterful readouts (printed to the terminal log) ---
+  function stats() {
+    const s = Store.all();
+    const files = s.filesRefined | 0;
+    const avg = files > 0 ? fmtTime(Math.round(s.totalTimeMs / files)) : "--:--";
+    const floor = s.floorFilesComplete | 0;
+    write("— PERFORMANCE RECORD —", "t-sys");
+    write("Files refined ....... " + files, "t-sys");
+    write("Average refine time . " + avg, "t-sys");
+    write("Floor files complete  " + floor, "t-sys");
+    write("Active temper ....... " + (TEMPERS[s.temper] ? TEMPERS[s.temper].label : "—"), "t-sys");
+    write("Your numbers please Kier. Industry is the truest devotion.", "t-sys");
+  }
+
+  function quota() {
+    const t = TEMPERS[Store.get("temper")] || { label: "—", clues: 0 };
+    const d = new Date();
+    const clock = [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map((x) => String(x).padStart(2, "0")).join(":");
+    write("CURRENT TEMPER: " + t.label + " · CLUE ALLOCATION: " + t.clues, "t-sys");
+    write("DEPARTMENT TIME: " + clock + ". Your file remains unrefined.", "t-sys");
+  }
+
+  function whoami() {
+    const name = getDisplayName();
+    if (name) write("NAME: " + name, "t-ok");
+    write("EMPLOYEE: " + getEmployeeId(), "t-ok");
+    write("DEPARTMENT: Macrodata Refinement.", "t-sys");
+    if (!name) write("No name on file. Register with: NAME <your name>", "t-sys");
+    write("You are an extraordinary and beloved member of the Lumon family.", "t-sys");
+  }
+
+  // Register / read the optional self-identified name. Takes the RAW argument
+  // (not upper-cased) so the user's own capitalization survives.
+  function name(rawArg) {
+    const arg = (rawArg || "").trim();
+    if (!arg) {
+      const cur = getDisplayName();
+      if (cur) {
+        write("IDENTITY ON FILE: " + cur + " · " + getEmployeeId(), "t-ok");
+        write("To revise: NAME <your name>. To erase: NAME --clear", "t-sys");
+      } else {
+        write("NO NAME ON FILE. Register with: NAME <your name>", "t-sys");
+        write("Your badge remains " + getEmployeeId() + ". A name is optional but seen.", "t-sys");
+      }
+      return;
+    }
+    if (/^--?clear$/i.test(arg)) {
+      setDisplayName("");
+      write("IDENTITY EXPUNGED. You are once more only " + getEmployeeId() + ".", "t-ok");
+      Sound.ok();
+      return;
+    }
+    const saved = setDisplayName(arg);
+    if (!saved) { write("Name not recognized. Please refrain from disorderly entry.", "t-err"); Sound.err(); return; }
+    write("IDENTITY REGISTERED: " + saved + " · " + getEmployeeId(), "t-ok");
+    write("Kier sees you, " + saved + ". Your certificates now bear your name.", "t-sys");
+    Sound.ok();
+  }
+
+  function file() {
+    write("FILE ASSIGNED: " + randomFileCode(), "t-ok");
+    write("The numbers are frightening. Refine them anyway.", "t-sys");
+  }
+
+  function catechism() {
+    const c = CATECHISMS[Math.floor(Math.random() * CATECHISMS.length)];
+    write("\u201C" + c + "\u201D — Kier Eagan", "t-sys");
+  }
+
   function route(raw) {
     const cmd = raw.trim().toUpperCase().replace(/\s+/g, " ");
     if (!cmd) return;
     Sound.ensure(); // unlock audio on first user gesture
     write("> " + cmd, "t-cmd");
 
+    // NAME / IDENTIFY take a free-text argument whose casing must survive, so
+    // they are handled from the RAW string rather than the upper-cased command.
+    const nameMatch = raw.trim().match(/^(?:NAME|IDENTIFY)\b\s*([\s\S]*)$/i);
+    if (nameMatch) { name(nameMatch[1]); return; }
+
     switch (cmd) {
       case "HELP":
-        write("DIRECTIVES: BEGIN · REFINE · CLEAR · HELP", "t-sys");
+        write("DIRECTIVES:", "t-sys");
+        write("  BEGIN / CONSOLE / SOLVER — open the data console", "t-sys");
+        write("  FLOOR / REFINE — enter the Refinement Floor", "t-sys");
+        write("  ABOUT — department disclosure", "t-sys");
+        write("  STATS — your performance record", "t-sys");
+        write("  QUOTA / TIME — current temper and department time", "t-sys");
+        write("  WHO AM I — employee identification", "t-sys");
+        write("  NAME <your name> — register your identity for certificates", "t-sys");
+        write("  FILE — receive a fresh file designation", "t-sys");
+        write("  CATECHISM — a word from Kier", "t-sys");
+        write("  CLEAR — purge the log · HELP — this list", "t-sys");
         write("Some words carry meaning. Lumon watches.", "t-sys");
         return;
       case "CLEAR":
         log.innerHTML = "";
         return;
       case "BEGIN":
+      case "CONSOLE":
+      case "SOLVER":
+        nav(cmd, () => App.goConsole());
+        return;
+      case "FLOOR":
       case "REFINE":
-        write("Initiating refinement protocol...", "t-ok");
-        Sound.ok();
-        setTimeout(() => App.goConsole(), 500);
+        nav(cmd, () => App.goFloor());
+        return;
+      case "ABOUT":
+        nav(cmd, () => App.goAbout());
+        return;
+      case "STATS":
+        stats();
+        return;
+      case "QUOTA":
+      case "TIME":
+        quota();
+        return;
+      case "WHO AM I":
+      case "WHOAMI":
+        whoami();
+        return;
+      case "FILE":
+        file();
+        return;
+      case "CATECHISM":
+        catechism();
         return;
     }
 
@@ -156,6 +273,8 @@ const App = (function () {
       const s = Store.all();
       if (s.progress && s.solution && s.givenMask) Console.restore(s);
       else Console.newPuzzle(Store.get("temper"));
+
+      Fit.apply(); // re-fit now that the grid + toolbar are laid out
     }, 850);
   }
 
@@ -171,6 +290,7 @@ const App = (function () {
       intake.classList.add("screen--active");
       Field.start();
       Store.set({ screen: "intake" });
+      Fit.apply();
     }, 500);
   }
 
@@ -189,6 +309,7 @@ const App = (function () {
       Sound.refreshHum();
       RefinementFloor.init();
       RefinementFloor.start();
+      Fit.apply();
     }, 850);
   }
 
@@ -203,6 +324,7 @@ const App = (function () {
       intake.classList.add("screen--active");
       Field.start();
       Store.set({ screen: "intake" });
+      Fit.apply();
     }, 500);
   }
 
@@ -217,6 +339,7 @@ const App = (function () {
       void about.offsetWidth;
       about.classList.add("screen--active");
       Store.set({ screen: "about" });
+      Fit.apply();
     }, 450);
   }
 
@@ -230,6 +353,7 @@ const App = (function () {
       intake.classList.add("screen--active");
       Field.start();
       Store.set({ screen: "intake" });
+      Fit.apply();
     }, 450);
   }
 
@@ -277,6 +401,99 @@ const App = (function () {
     }
     upd(); setInterval(upd, 1000);
   }
+
+  /* ---- Fit scaler ----
+     The shared CRT now takes a fixed, pleasing shape from the viewport (see
+     .crt in style.css). Each screen's readout lives in a .crt__fit layer that
+     is laid out at its NATURAL size; this routine measures that natural box
+     against the available .crt__inner box and, only when the content would
+     overflow, sets a --fit-scale < 1 so the whole readout shrinks uniformly.
+     No overflow ⇒ no stray scrollbars. We never scale UP, so a roomy viewport
+     is pixel-identical to the original design.
+
+       data-fit="scale"  intake, console  → measure + shrink
+       data-fit="scroll" about            → no transform; .about-body scrolls
+       data-fit="none"   floor            → no transform; fluid canvas adapts
+
+     Exposes Fit.apply() so screen transitions can re-fit after a screen shows,
+     (it also re-runs the terminal caret placement after a scale change). */
+  let _caretPlace = null; // set by enhanceTerminalCaret so Fit can re-run it
+  const Fit = (function () {
+    let raf = 0;
+
+    function fitOne(fit) {
+      const mode = fit.getAttribute("data-fit");
+      if (mode === "scroll" || mode === "none") return; // opt-outs
+      const inner = fit.parentElement; // .crt__inner (the available box)
+      if (!inner) return;
+
+      // measure at natural layout: reset our contribution first
+      fit.style.setProperty("--fit-scale", "1");
+
+      // available box = inner content box minus its padding
+      const cs = getComputedStyle(inner);
+      const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const availW = inner.clientWidth - padX;
+      const availH = inner.clientHeight - padY;
+      if (availW <= 0 || availH <= 0) return;
+
+      // natural content size (transform doesn't affect scroll size, so this is
+      // the true laid-out extent regardless of the current --fit-scale)
+      const natW = fit.scrollWidth;
+      const natH = fit.scrollHeight;
+      if (natW <= 0 || natH <= 0) return;
+
+      // shrink-only fit; the 1.012 bezel "bulge" lives in the CSS calc()
+      const s = Math.min(1, availW / natW, availH / natH);
+      fit.style.setProperty("--fit-scale", String(s));
+    }
+
+    function apply() {
+      const screen = document.querySelector(".screen--active");
+      if (!screen) return;
+      const fits = screen.querySelectorAll(".crt__fit");
+      fits.forEach(fitOne);
+      // keep the synthetic terminal caret aligned after a re-scale
+      if (typeof _caretPlace === "function") _caretPlace();
+    }
+
+    function schedule() {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { raf = 0; apply(); });
+    }
+
+    function init() {
+      window.addEventListener("resize", schedule, { passive: true });
+      window.addEventListener("orientationchange", schedule, { passive: true });
+      // re-fit when fonts finish loading (metrics shift the natural height)
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(schedule).catch(() => {});
+      }
+      // Re-fit on internal reflows (console toolbar row swap on edit, grid
+      // rebuilds, etc.). The fit layer is stretched to fill its box, so a
+      // ResizeObserver on it can't see content-only changes — a subtree
+      // MutationObserver can. It's debounced through schedule()/rAF, and our
+      // own writes are limited to a CSS custom property on .crt__fit, which we
+      // exclude from the attribute filter to avoid self-triggering.
+      if (typeof MutationObserver === "function") {
+        const mo = new MutationObserver(schedule);
+        document.querySelectorAll(".crt__fit").forEach((el) =>
+          mo.observe(el, {
+            subtree: true, childList: true,
+            attributes: true,
+            attributeFilter: ["class", "hidden", "value"],
+          })
+        );
+        // body.is-editing (console authoring) lives outside the fit subtree and
+        // swaps toolbar rows via display, changing natural height — watch it.
+        mo.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      }
+      schedule();
+    }
+
+    return { init, apply, schedule };
+  })();
 
   /* Shared hex readout — the paired 0x…… code now lives in every CRT footer.
      It flickers on all three pages the way the Floor's always has. (The Floor
@@ -389,6 +606,7 @@ const App = (function () {
     input.addEventListener("focus", () => { show(true); place(); });
     input.addEventListener("blur", () => show(false));
     window.addEventListener("resize", place);
+    _caretPlace = place; // let the Fit scaler re-align the caret after a re-scale
     show(document.activeElement === input);
     place();
   }
@@ -406,12 +624,15 @@ const App = (function () {
       el.innerHTML = `
         <div class="modal__scrim" data-close="1"></div>
         <div class="modal__panel confirm__panel" role="dialog" aria-modal="true" aria-label="Reset stored data">
-          <div class="confirm__title">PURGE LOCAL RECORD?</div>
+          <div class="confirm__title">SEVER THIS RECORD?</div>
           <div class="confirm__body">
-            This permanently erases every value Lumon has stored in this browser —
-            your in-progress file, files refined, accuracy, average time, badge,
-            floor completions and unlocked incentives.<br><br>
-            This action cannot be undone.
+            You are about to expunge the entirety of your tenure as Lumon has
+            chosen to remember it — your active file, every file refined, your
+            measured accuracy, your refinement times, your assigned badge, your
+            floor completions, and any incentives you were graciously permitted
+            to earn.<br><br>
+            What is forgotten cannot be reinstated. Kier does not recover what
+            you discard. Be certain your remorse will outlast your curiosity.
           </div>
           <div class="confirm__actions">
             <button class="btn" data-close="1" id="reset-no">NO &mdash; KEEP</button>
@@ -472,6 +693,34 @@ const App = (function () {
     const resetBtn = $("#reset-btn");
     if (resetBtn) resetBtn.addEventListener("click", () => { Sound.select(); ResetConfirm.open(); });
 
+    // PROTOCOLS drawer — collapses the secondary console actions so the screen
+    // stays focused on the grid. Toggling [hidden] also lets the Fit scaler
+    // re-measure (less content ⇒ less/no shrink, bigger grid).
+    (function wireDrawer() {
+      const toggle = $("#drawer-toggle");
+      const drawer = $("#protocol-drawer");
+      if (!toggle || !drawer) return;
+      function setOpen(open) {
+        drawer.hidden = !open;
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        Fit.schedule();
+      }
+      toggle.addEventListener("click", () => {
+        Sound.select();
+        setOpen(drawer.hidden); // hidden ⇒ open it
+      });
+      // Authoring (ENTER MANUALLY → body.is-editing) needs the drawer open so
+      // SET PUZZLE / CANCEL are reachable; force it open and keep it open while
+      // editing. Decoupled from sudoku.js via a body-class observer.
+      if (typeof MutationObserver === "function") {
+        new MutationObserver(() => {
+          if (document.body.classList.contains("is-editing") && drawer.hidden) {
+            setOpen(true);
+          }
+        }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      }
+    })();
+
     // wide, real, moving caret for the intake terminal
     enhanceTerminalCaret();
 
@@ -486,6 +735,7 @@ const App = (function () {
     rotateCatechism();
     tickClock();
     tickHexFooters();
+    Fit.init();
     document.addEventListener("keydown", keyboard);
 
     // resume to whichever screen the session left off on
@@ -515,6 +765,9 @@ const App = (function () {
       $("#screen-about").classList.add("screen--active");
       Field.stop();
     }
+
+    // fit whichever screen ended up active (resume path or default intake)
+    Fit.apply();
   }
 
   return { init, goConsole, goIntake, goFloor, goFloorBack, goAbout, goAboutBack };

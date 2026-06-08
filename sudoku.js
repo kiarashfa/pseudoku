@@ -8,7 +8,7 @@ import {
   TEMPERS, ERROR_THRESHOLD, FALLBACK,
   $, $$, fmtTime, toast,
   SudokuEngine, Store, Sound, Corporate, Interstitial,
-  getEmployeeId, randomFileCode,
+  getEmployeeId, getDisplayName, getRefinerName,
 } from "./core.js";
 import { OpticalIntake } from "./ocr.js";
 
@@ -192,7 +192,12 @@ export const Console = (function () {
 
   function updateStats() {
     const correct = filledCorrectly();
-    const pct = Math.round((correct / 81) * 100);
+    // Completion is measured over user-fillable cells only (81 minus givens),
+    // so a fresh puzzle reads 0% and a solved one reads 100%.
+    const givens = givenMask.filter(Boolean).length;
+    const fillable = 81 - givens;
+    const correctUser = grid.filter((v, i) => !givenMask[i] && v !== 0 && v === solution[i]).length;
+    const pct = fillable === 0 ? 0 : Math.round((correctUser / fillable) * 100);
 
     $("#stat-files").textContent = Store.get("filesRefined");
     $("#stat-progress").innerHTML = pct + "<small>%</small>";
@@ -261,25 +266,40 @@ export const Console = (function () {
     Sound.chime();
     Corporate.stopIdle();
     const elapsed = startTime ? Date.now() - startTime : 0;
-    const newCount = Store.get("filesRefined") + 1;
-    Store.set({
-      filesRefined: newCount,
-      totalTimeMs: Store.get("totalTimeMs") + elapsed,
-    });
-    updateStats();
-    Corporate.friendly();
 
-    // Refinement Report certificate for every successful solve.
+    // Per-file accuracy: correct user entries / total fillable cells.
     const acc = manual
       ? Math.round((grid.filter((v, i) => !givenMask[i] && v === solution[i]).length /
           Math.max(1, grid.filter((v, i) => !givenMask[i]).length)) * 100)
       : 100;
-    setTimeout(() => RefinementReport.open({
-      temper: (TEMPERS[Store.get("temper")] || TEMPERS.woe).label,
-      accuracy: acc,
-      elapsed,
-      manual,
-    }), 700);
+
+    const temperKey = Store.get("temper") || "woe";
+    const newCount = Store.get("filesRefined") + 1;
+    const prevBest = Store.get("bestTimeMs") || 0;
+
+    // per-temper lifetime ledger
+    const ledger = { ...(Store.get("temperStats") || {}) };
+    const t = ledger[temperKey] || { files: 0, accSum: 0, totalTimeMs: 0, bestTimeMs: 0 };
+    ledger[temperKey] = {
+      files: t.files + 1,
+      accSum: t.accSum + acc,
+      totalTimeMs: t.totalTimeMs + elapsed,
+      bestTimeMs: t.bestTimeMs === 0 ? elapsed : Math.min(t.bestTimeMs, elapsed),
+    };
+
+    Store.set({
+      filesRefined: newCount,
+      totalTimeMs: Store.get("totalTimeMs") + elapsed,
+      accSum: (Store.get("accSum") || 0) + acc,
+      bestTimeMs: prevBest === 0 ? elapsed : Math.min(prevBest, elapsed),
+      temperStats: ledger,
+    });
+    updateStats();
+    Corporate.friendly();
+
+    // Confetti fires on EVERY successful solve, on its own — decoupled from the
+    // Waffle Party incentive so it is always visible and never sits behind it.
+    WaffleParty.celebrate();
 
     // Waffle Party eligibility milestone (every 3rd file, or already unlocked).
     if (newCount % 3 === 0 || Store.get("waffleUnlocked")) {
@@ -514,6 +534,8 @@ export const Console = (function () {
     $("#check-btn").addEventListener("click", check);
     $("#clear-btn").addEventListener("click", clearEntries);
     $("#new-btn").addEventListener("click", () => newPuzzle(Store.get("temper")));
+    const reportBtn = $("#report-btn");
+    if (reportBtn) reportBtn.addEventListener("click", () => { Sound.select(); RefinementReport.open(); });
     $("#paste-btn").addEventListener("click", () => loadFromString($("#paste-input").value));
     $("#paste-input").addEventListener("keydown", (e) => {
       if (e.key === "Enter") loadFromString($("#paste-input").value);
@@ -632,15 +654,42 @@ export const WaffleParty = (function () {
     });
   }
 
-  function burst() {
-    if (!window.confetti) return;
+  function burst(confettiFn) {
+    const fire = confettiFn || window.confetti;
+    if (!fire) return;
     const end = Date.now() + 1400;
     const colors = ["#7fdfff", "#cfe8f5", "#4a9eba", "#ffffff"];
     (function frame() {
-      window.confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0 }, colors });
-      window.confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1 }, colors });
+      fire({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0 }, colors });
+      fire({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1 }, colors });
       if (Date.now() < end) requestAnimationFrame(frame);
     })();
+  }
+
+  // Confetti on its own dedicated top-layer canvas, so it always renders ABOVE
+  // any window (Waffle Party included) rather than behind it. Fired on every
+  // solve, independent of the incentive milestone.
+  let confettiInstance = null;
+  function getConfettiCanvas() {
+    let cv = $("#confetti-canvas");
+    if (!cv) {
+      cv = document.createElement("canvas");
+      cv.id = "confetti-canvas";
+      cv.style.cssText =
+        "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999;";
+      document.body.appendChild(cv);
+    }
+    return cv;
+  }
+  async function celebrate() {
+    await loadConfetti();
+    if (!window.confetti || !window.confetti.create) { burst(); return; }
+    if (!confettiInstance) {
+      confettiInstance = window.confetti.create(getConfettiCanvas(), {
+        resize: true, useWorker: true,
+      });
+    }
+    burst(confettiInstance);
   }
 
   function build() {
@@ -658,8 +707,9 @@ export const WaffleParty = (function () {
         <div class="waffle__pixel" id="waffle-pixel" aria-hidden="true"></div>
         <div class="waffle__cert">
           <div class="waffle__cert-head">CERTIFICATE OF INCENTIVE</div>
-          <p>This certifies that employee <strong id="waffle-id"></strong> has been
-          awarded one (1) <strong>Waffle Party</strong>, redeemable never.</p>
+          <p>This certifies that employee <strong id="waffle-name"></strong>
+          <span id="waffle-id-wrap" class="waffle__badge">(<span id="waffle-id"></span>)</span>
+          has been awarded one (1) <strong>Waffle Party</strong>, redeemable never.</p>
           <p class="waffle__fine">No actual waffles, party, or sustenance will be provided.
           The experience is the reward. Praise Kier.</p>
         </div>
@@ -724,17 +774,24 @@ export const WaffleParty = (function () {
     }
   }
 
-  async function open() {
+  function open() {
     build();
     hideBanner();
-    $("#waffle-id").textContent = getEmployeeId();
+    // Name when registered, badge always alongside it — corporate texture.
+    const name = getDisplayName();
+    $("#waffle-name").textContent = name || getEmployeeId();
+    const idWrap = $("#waffle-id-wrap");
+    if (name) {
+      $("#waffle-id").textContent = getEmployeeId();
+      idWrap.style.display = "";
+    } else {
+      idWrap.style.display = "none"; // avoid showing the badge twice
+    }
     mountVideo();
     mountPixel();
     $("#waffle-modal").classList.add("show");
     Sound.done();
     Corporate.friendly();
-    await loadConfetti();
-    burst();
   }
 
   function close() {
@@ -745,11 +802,12 @@ export const WaffleParty = (function () {
     const px = $("#waffle-pixel"); if (px && px._timer) clearInterval(px._timer);
   }
 
-  return { showBanner, hideBanner, open, close };
+  return { showBanner, hideBanner, open, close, celebrate };
 })();
 
 export const RefinementReport = (function () {
   let lastData = null;
+  let nudged = false;   // show the name-registration tip at most once per session
   function loadJsPDF() {
     return new Promise((resolve) => {
       if (window.jspdf && window.jspdf.jsPDF) return resolve(true);
@@ -779,8 +837,9 @@ export const RefinementReport = (function () {
             </svg>
           </div>
           <div class="report__head">REFINEMENT REPORT</div>
-          <div class="report__dept">LUMON INDUSTRIES — MACRODATA REFINEMENT</div>
+          <div class="report__dept">LUMON INDUSTRIES — MACRODATA REFINEMENT — LIFETIME RECORD</div>
           <dl class="report__fields" id="report-fields"></dl>
+          <div class="report__tempers" id="report-tempers"></div>
           <div class="report__thanks">Kier thanks you.</div>
         </div>
         <div class="report__actions">
@@ -793,74 +852,189 @@ export const RefinementReport = (function () {
     $("#report-dl").addEventListener("click", download);
   }
 
-  function fieldRows(d) {
+  // Gather cumulative/lifetime figures from the Store.
+  function gather() {
+    const files = Store.get("filesRefined") || 0;
+    const totalMs = Store.get("totalTimeMs") || 0;
+    const bestMs = Store.get("bestTimeMs") || 0;
+    const accSum = Store.get("accSum") || 0;
+    const ledger = Store.get("temperStats") || {};
+    const overallAcc = files > 0 ? Math.round(accSum / files) : 0;
+    const avgMs = files > 0 ? totalMs / files : 0;
+
+    const tempers = ["woe", "frolic", "dread", "malice"].map((key) => {
+      const t = ledger[key];
+      const label = (TEMPERS[key] || TEMPERS.woe).label;
+      if (!t || !t.files) {
+        return { key, label, files: 0, accuracy: 0, bestMs: 0, avgMs: 0 };
+      }
+      return {
+        key, label,
+        files: t.files,
+        accuracy: Math.round(t.accSum / t.files),
+        bestMs: t.bestTimeMs || 0,
+        avgMs: t.files > 0 ? t.totalTimeMs / t.files : 0,
+      };
+    });
+
+    return {
+      refinedBy: getRefinerName(),
+      hasName: !!getDisplayName(),
+      employeeId: getEmployeeId(),
+      files, overallAcc, avgMs, bestMs, tempers,
+    };
+  }
+
+  // Summary rows (the headline lifetime figures).
+  function summaryRows(d) {
     return [
+      ["Refined By", d.refinedBy],
       ["Employee ID", d.employeeId],
-      ["File", d.fileCode],
-      ["Temper", d.temper],
-      ["Refinement Accuracy", d.accuracy + "%"],
-      ["Quota Contribution", d.quota + "%"],
-      ["Refinement Time", fmtTime(d.elapsed)],
-      ["Method", d.manual ? "Manual" : "Protocol-Assisted"],
+      ["Total Files Refined", String(d.files)],
+      ["Overall Accuracy", d.files ? d.overallAcc + "%" : "—"],
+      ["Average Refinement Time", d.files ? fmtTime(d.avgMs) : "—"],
+      ["Best Refinement Time", d.files ? fmtTime(d.bestMs) : "—"],
       ["Date", new Date().toLocaleDateString()],
     ];
   }
 
-  function open(info) {
+  function open() {
     build();
-    const data = {
-      employeeId: getEmployeeId(),
-      fileCode: randomFileCode(),
-      temper: info.temper,
-      accuracy: info.accuracy,
-      quota: 3 + Math.floor(Math.random() * 7), // 3–9% deadpan contribution
-      elapsed: info.elapsed,
-      manual: info.manual,
-    };
+    const data = gather();
     lastData = data;
+
+    // headline summary
     const dl = $("#report-fields");
     dl.innerHTML = "";
-    fieldRows(data).forEach(([k, v]) => {
+    summaryRows(data).forEach(([k, v]) => {
       const dt = document.createElement("dt"); dt.textContent = k;
       const dd = document.createElement("dd"); dd.textContent = v;
       dl.appendChild(dt); dl.appendChild(dd);
     });
+
+    // per-temper breakdown table
+    const host = $("#report-tempers");
+    if (host) {
+      const rows = data.tempers.map((t) => `
+        <tr>
+          <th scope="row">${t.label}</th>
+          <td>${t.files}</td>
+          <td>${t.files ? t.accuracy + "%" : "—"}</td>
+          <td>${t.files ? fmtTime(t.bestMs) : "—"}</td>
+          <td>${t.files ? fmtTime(t.avgMs) : "—"}</td>
+        </tr>`).join("");
+      host.innerHTML = `
+        <div class="report__subhead">PER-TEMPER REFINEMENT</div>
+        <table class="report__tempers-table">
+          <thead>
+            <tr><th>TEMPER</th><th>FILES</th><th>ACC</th><th>BEST</th><th>AVG</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
     $("#report-modal").classList.add("show");
     Sound.chime();
+
+    // Gentle one-time nudge: if no name is on file, invite the user to claim
+    // the certificate as their own. Purely additive — never blocks the report.
+    if (!data.hasName && !nudged) {
+      nudged = true;
+      setTimeout(() => toast(
+        "TIP: REGISTER YOUR NAME VIA THE TERMINAL ('NAME ...') TO PERSONALIZE THIS CERTIFICATE",
+        "passive"), 900);
+    }
   }
 
   async function download() {
     const ok = await loadJsPDF();
     if (!ok || !lastData) { toast("PDF MODULE UNAVAILABLE", "passive"); return; }
+    const d = lastData;
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    // ISO B5 — narrower/shorter than A4, closer to the on-screen report window
+    // and with far less trailing whitespace below the content.
+    const doc = new jsPDF({ unit: "pt", format: "b5" });
     const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
     const cx = W / 2;
 
     // cold form styling
-    doc.setFillColor(10, 16, 24); doc.rect(0, 0, W, doc.internal.pageSize.getHeight(), "F");
+    doc.setFillColor(10, 16, 24); doc.rect(0, 0, W, H, "F");
     doc.setDrawColor(46, 85, 107); doc.setLineWidth(1);
-    doc.rect(40, 40, W - 80, doc.internal.pageSize.getHeight() - 80);
+    doc.rect(40, 40, W - 80, H - 80);
 
     doc.setTextColor(207, 232, 245);
     doc.setFont("courier", "bold"); doc.setFontSize(20);
     doc.text("REFINEMENT REPORT", cx, 110, { align: "center" });
-    doc.setFontSize(10); doc.setTextColor(127, 223, 255);
+    doc.setFontSize(9); doc.setTextColor(127, 223, 255);
     doc.setFont("helvetica", "normal");
-    doc.text("LUMON INDUSTRIES  ·  MACRODATA REFINEMENT", cx, 132, { align: "center" });
+    doc.text("LUMON INDUSTRIES  ·  MACRODATA REFINEMENT  ·  LIFETIME RECORD", cx, 132, { align: "center" });
 
     doc.setDrawColor(46, 85, 107);
     doc.line(80, 156, W - 80, 156);
 
-    const rows = fieldRows(lastData);
-    let y = 200;
+    // Featured awardee line when a name is registered — makes the certificate
+    // feel addressed to the person. The badge still appears in the rows below.
+    let y = 196;
+    let rows = summaryRows(d);
+    if (d.hasName) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+      doc.setTextColor(93, 126, 142);
+      doc.text("PRESENTED TO", cx, 184, { align: "center" });
+      doc.setFont("courier", "bold"); doc.setFontSize(17);
+      doc.setTextColor(207, 232, 245);
+      doc.text(d.refinedBy, cx, 208, { align: "center" });
+      doc.setDrawColor(46, 85, 107); doc.line(140, 226, W - 140, 226);
+      y = 262;
+      rows = rows.filter(([k]) => k !== "Refined By"); // already featured above
+    }
+
+    // summary block
     doc.setFontSize(12);
     rows.forEach(([k, v]) => {
       doc.setTextColor(93, 126, 142); doc.setFont("helvetica", "normal");
       doc.text(k.toUpperCase(), 90, y);
       doc.setTextColor(207, 232, 245); doc.setFont("courier", "bold");
       doc.text(String(v), W - 90, y, { align: "right" });
-      y += 34;
+      y += 30;
+    });
+
+    // per-temper breakdown
+    y += 10;
+    doc.setDrawColor(46, 85, 107); doc.line(80, y, W - 80, y); y += 26;
+    doc.setTextColor(127, 223, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("PER-TEMPER REFINEMENT", 90, y); y += 22;
+
+    // Column layout derived from the page width so it adapts to the format:
+    // TEMPER is left-aligned at the left margin; the four numeric columns are
+    // right-aligned at evenly spaced anchors so values grow leftward and never
+    // spill past the right margin (the AVG column in particular).
+    const left = 90;
+    const right = W - 90;
+    const numCols = 4;                  // FILES, ACC, BEST, AVG
+    const span = right - (left + 50);   // reserve room after the TEMPER label
+    const anchors = [];
+    for (let i = 0; i < numCols; i++) {
+      anchors.push(right - (numCols - 1 - i) * (span / (numCols - 1)));
+    }
+    const heads = ["FILES", "ACC", "BEST", "AVG"];
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(93, 126, 142);
+    doc.text("TEMPER", left, y);
+    heads.forEach((h, i) => doc.text(h, anchors[i], y, { align: "right" }));
+    y += 8; doc.line(80, y, W - 80, y); y += 20;
+
+    doc.setFont("courier", "normal"); doc.setFontSize(10);
+    d.tempers.forEach((t) => {
+      const nums = [
+        String(t.files),
+        t.files ? t.accuracy + "%" : "—",
+        t.files ? fmtTime(t.bestMs) : "—",
+        t.files ? fmtTime(t.avgMs) : "—",
+      ];
+      doc.setTextColor(207, 232, 245);
+      doc.text(t.label, left, y);
+      nums.forEach((c, i) => doc.text(c, anchors[i], y, { align: "right" }));
+      y += 24;
     });
 
     doc.setDrawColor(46, 85, 107); doc.line(80, y + 6, W - 80, y + 6);
@@ -871,9 +1045,9 @@ export const RefinementReport = (function () {
     doc.setFont("helvetica", "italic"); doc.setFontSize(8);
     doc.setTextColor(74, 158, 186);
     doc.text("This document affirms compliance. It confers no rights, benefits, or waffles.",
-      cx, doc.internal.pageSize.getHeight() - 70, { align: "center" });
+      cx, H - 70, { align: "center" });
 
-    doc.save("Refinement_Report_" + lastData.fileCode.replace(/[^A-Z0-9]/gi, "") + ".pdf");
+    doc.save("Refinement_Report_" + d.employeeId.replace(/[^A-Z0-9]/gi, "") + ".pdf");
     Sound.ok();
   }
 
