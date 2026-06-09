@@ -459,7 +459,7 @@ export const Console = (function () {
     // 2) enough clues (17 is the known minimum for a unique Sudoku)
     const clues = grid.filter((v) => v !== 0).length;
     if (clues < 17) {
-      fail("INSUFFICIENT NUMERIC CONTENT — REQUIRE AT LEAST 17 GIVENS.");
+      fail("INSUFFICIENT NUMERIC CONTENT.");
       return;
     }
     // 3) exactly one solution

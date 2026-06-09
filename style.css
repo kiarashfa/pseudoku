@@ -33,9 +33,24 @@
   --sans: "Archivo", "Helvetica Neue", Arial, sans-serif;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* ── THE ONE CURSOR ─────────────────────────────────────────────
+     A single outline-only arrow in theme cyan (#7fdfff -> %237fdfff
+     in the data URI), thick stroke, no fill — used on EVERY page via
+     the universal rule below. To restyle it, edit ONLY this variable:
+       · stroke="%237fdfff"  -> color
+       · stroke-width="3"    -> line thickness
+       · rotate(22 10 3)     -> the slight clockwise lean
+       · the trailing "10 3" -> hotspot = the arrow tip's x y in the
+         32x32 image (keep it on the tip if you move the path)      */
+  --cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M6 2 L6 28 L13 20 L24 20 Z" transform="rotate(-10 10 3)" fill="none" stroke="%237fdfff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg>') 10 3, auto;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* one cursor everywhere — overrides every per-element pointer/crosshair/
+   default so the whole app shares the single themed arrow */
+*, *::before, *::after { cursor: var(--cursor) !important; }
 
 html, body {
   height: 100%;
@@ -1566,9 +1581,11 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 .floor-bins {
   position: relative; z-index: 2; flex: none;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  gap: clamp(6px, 1vw, 12px); margin-top: 24px; padding-top: 22px;
+  gap: clamp(6px, 1vw, 12px); margin-top: 4px; padding-top: 22px;
 }
-/* two parallel divider lines between the number field and the bins */
+/* two parallel divider lines between the number field and the bins —
+   pulled up tight (margin-top 24px -> 4px) against the last row of
+   digits, freeing vertical room for the taller boxes below */
 .floor-bins::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px;
   border-top: 2px solid var(--cyan);
@@ -1584,20 +1601,22 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 }
 .floor-bin:hover { filter: drop-shadow(0 0 6px rgba(127,223,255,.35)); }
 
-/* rectangle 1 — the code plate */
+/* rectangle 1 — the code plate. 3px border = the visual weight of the
+   door lids (stroke 2.4 viewBox units stretched to ~3px on screen) */
 .floor-bin__head {
-  text-align: center; padding: 3px 0 4px;
-  border: 2px solid var(--cyan);
+  text-align: center; padding: 7px 0 8px;
+  border: 3px solid var(--cyan);
   box-shadow: 0 0 8px rgba(127,223,255,.18), inset 0 0 10px rgba(127,223,255,.04);
   background: rgba(10,22,32,.35);
   font-family: var(--sans); font-weight: 800; letter-spacing: .14em;
-  font-size: clamp(13px, 1.5vw, 19px); color: var(--cyan);
+  font-size: clamp(15px, 1.7vw, 21px); color: var(--cyan);
   text-shadow: 0 0 8px rgba(127,223,255,.5);
 }
-/* rectangle 2 — the fill bar, with the % sitting INSIDE it on the left */
+/* rectangle 2 — the fill bar, with the % sitting INSIDE it on the left;
+   sized to ~80-85% of the head box's height; same 3px lid-weight border */
 .floor-bin__foot {
-  position: relative; height: clamp(18px, 2.4vh, 24px);
-  border: 2px solid var(--cyan);
+  position: relative; height: clamp(32px, 4.2vh, 38px);
+  border: 3px solid var(--cyan);
   box-shadow: 0 0 8px rgba(127,223,255,.18), inset 0 0 10px rgba(127,223,255,.04);
   background: rgba(10,22,32,.35); overflow: hidden;
 }
@@ -1607,9 +1626,9 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   transition: width .6s var(--ease); z-index: 1; overflow: hidden;
 }
 .floor-bin__pct {
-  position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
   font-family: var(--sans); font-weight: 800;
-  font-size: clamp(10px, 1.25vw, 14px); letter-spacing: .02em;
+  font-size: clamp(12px, 1.4vw, 16px); letter-spacing: .02em;
   white-space: nowrap;
 }
 /* base copy: cyan, sits on the dark track (visible where unfilled) */
@@ -1633,35 +1652,54 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 }
 
 /* ---------- the box + temper meter that opens above a bin ---------- */
-/* the box matches the bin width below it (left:0;right:0) */
+/* the box matches the bin width below it (left:0;right:0) and sits FLUSH
+   on the bin's top edge so the lid hinges attach to the bin itself */
 .floor-box {
-  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px);
+  position: absolute; left: 0; right: 0; bottom: 100%;
   z-index: 30; opacity: 0; pointer-events: none;
 }
 .floor-bin.is-open .floor-box { opacity: 1; }
 
-/* the meter panel floats slowly UP out of the box once the lids open */
-.floor-box__panel {
+/* ── PANEL REVEAL ──────────────────────────────────────────────────
+   The panel literally comes OUT of the box. .floor-box__reveal is a
+   clipping mask whose BOTTOM edge sits exactly on the bin's top line
+   (= the horizontal "revealing line"). The panel starts fully pushed
+   below that line (translateY(100%) — invisible inside the bin) and
+   slides straight up out of it; nothing is ever drawn below the line.
+   Negative side/top margins (+ matching padding) give the panel's
+   glow room on the open sides while keeping the bottom clip exact. */
+.floor-box__reveal {
   position: relative; z-index: 2;
+  overflow: hidden;                 /* the mask — clips at the bin top line */
+  margin: -28px -28px 0;            /* widen the mask up + sideways for glow… */
+  padding: 28px 28px 0;             /* …without moving the panel or the clip line */
+}
+.floor-box__panel {
+  position: relative;
+  min-height: 180px;              /* doubled (was ~90px of natural content height) */
+  display: flex; flex-direction: column;
   border: 2px solid var(--cyan); background: rgba(7,16,24,.96);
   box-shadow: 0 0 20px rgba(127,223,255,.32), inset 0 0 16px rgba(127,223,255,.05);
-  transform: translateY(42px) scaleY(.5); transform-origin: bottom center;
-  opacity: 0;
-  /* emerges AFTER the lids begin opening, and rises slowly (1.2s) */
-  transition: opacity .9s var(--ease) .45s, transform 1.2s var(--ease) .45s;
+  transform: translateY(100%);      /* parked below the reveal line, fully hidden */
+  /* slide OUT of view (sinking back into the box) */
+  transition: transform .65s var(--ease);
 }
-.floor-bin.is-open .floor-box__panel { opacity: 1; transform: translateY(0) scaleY(1); }
+.floor-bin.show-panel .floor-box__panel {
+  transform: translateY(0);
+  /* slide IN — steady rise out of the open box, gated by JS until the
+     lids are fully open (hover) or the numbers have dropped (dump) */
+  transition: transform .95s var(--ease) .1s;
+}
 
-.floor-box__code {
-  text-align: center; padding: 2px 0 3px; border-bottom: 2px solid var(--cyan);
-  font-family: var(--sans); font-weight: 800; letter-spacing: .16em;
-  font-size: 15px; color: var(--cyan); text-shadow: 0 0 8px rgba(127,223,255,.5);
+.floor-box__meters {
+  flex: 1 1 auto; padding: 14px 12px;
+  display: flex; flex-direction: column;
+  justify-content: space-evenly; gap: 8px;   /* meters spread across the taller panel */
 }
-.floor-box__meters { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.floor-meter { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; }
-.floor-meter__lbl { font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: .04em; color: var(--cyan); }
+.floor-meter { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 10px; }
+.floor-meter__lbl { font-family: var(--sans); font-weight: 700; font-size: 15px; letter-spacing: .04em; color: var(--cyan); }
 .floor-meter__track {
-  position: relative; height: 13px; overflow: hidden;
+  position: relative; height: 24px; overflow: hidden;
   background: rgba(127,223,255,.05); border: 1px solid var(--line-strong);
 }
 .floor-meter__bar {
@@ -1670,20 +1708,14 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 }
 .floor-meter__bar.is-full { opacity: 1; box-shadow: 0 0 11px var(--c); }
 
-/* the code plate that sits below the panel, between the open flaps (screen3) */
-.floor-box__base {
-  position: relative; z-index: 2; text-align: center; padding: 2px 0 1px;
-  font-family: var(--sans); font-weight: 800; letter-spacing: .16em;
-  font-size: 15px; color: var(--cyan); text-shadow: 0 0 8px rgba(127,223,255,.5);
-  opacity: 0; transition: opacity .5s var(--ease) 1.3s;
-}
-.floor-bin.is-open .floor-box__base { opacity: 1; }
-
 /* the SVG door — two line-lids hinged at the box mouth, opening UP (\/).
-   Anchored at the box bottom; its height lets the lids rise alongside the
-   panel. overflow is visible so the lids can spread beyond the box width. */
+   The hinge line is drawn at the SVG's bottom edge and the door is anchored
+   flush on the bin head. The element spans EXACTLY the bin rectangle
+   (left:0; right:0) and the SVG mouth spans its full viewBox, so the two
+   hinges sit precisely on the bin's top corners. overflow stays visible so
+   the open lids can swing beyond the box width. */
 .floor-box__door {
-  position: absolute; left: -6%; right: -6%; bottom: -2px; height: 78px;
+  position: absolute; left: 0; right: 0; bottom: 0; height: 78px;
   z-index: 3; pointer-events: none; overflow: visible;
 }
 .floor-box__door svg { width: 100%; height: 100%; overflow: visible; display: block; }
@@ -1698,12 +1730,14 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 .floor-bin.is-full .floor-box__panel { border-color: #7fffb0; }
 .floor-bin.is-full .floor-box__door .door-lid { stroke: #7fffb0; }
 
-/* numbers flying into a box */
+/* the REAL numbers in transit from the field into a bin — styled to match
+   a selected glyph on the canvas (white-cyan, glowing), centred on its exact
+   former position; per-flyer transitions are set inline by floor.js */
 .floor-flyer {
-  position: fixed; z-index: 9450; font-family: var(--mono); font-weight: 700;
-  color: var(--glow); pointer-events: none;
-  text-shadow: 0 0 10px rgba(127,223,255,.7);
-  transition: transform .9s var(--ease), opacity .9s var(--ease);
+  position: fixed; left: 0; top: 0; z-index: 9450;
+  font-family: var(--mono); font-weight: 700;
+  color: rgb(214,238,251); pointer-events: none;
+  text-shadow: 0 0 12px rgba(127,223,255,.9);
   will-change: transform, opacity;
 }
 

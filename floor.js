@@ -9,9 +9,10 @@
      - A follow-cursor MAGNIFIER (fisheye) enlarges the field under
        the pointer. True clusters "feel" alive — a per-temper
        jitter/pulse — strongest under the lens.
-     - You SWEEP the magnifier to gather a cluster: only the live
-       (tempered) numbers under the brush highlight, so selection is
-       always local and predictable.
+     - Selection is MANUAL and literal: a left click selects exactly
+       the digit under the cursor (the one the lens magnifies), a held
+       sweep adds every digit the cursor passes over, and a right
+       click clears the selection. No hidden auto-expansion.
      - Dropping into a bin is VALIDATED (too small / too large /
        mixed-temper / non-contiguous); bad sorts get the show's
        thumbs-down "Nope".
@@ -30,25 +31,23 @@ export const RefinementFloor = (function () {
   /* ---- field constants ---- */
   const CELL = 40;               // dense grid (small numbers, like the show)
   const BASE_FS = 16;            // base glyph size
-  const LENS_R = CELL * 1.6;     // magnifier radius — tight: only 2-3 glyphs lift
+  const LENS_R = CELL * 2.2;     // magnifier radius — wide enough to scan a cluster
   const LENS_MAX = 1.7;          // peak extra scale at the cursor
-  const BRUSH = CELL * 1.10;     // selection reach around the cursor (hover-grab)
-  const FLOAT_LOOP = 2200;       // ms per gentle float oscillation
+  const FLOAT_LOOP = 3200;       // ms per gentle float oscillation (calm)
   const CAP = 320;               // max cells (perf)
   const BIN_COUNT = 5;
-  const EMPTY_MS = 1000;         // a binned slot stays empty for 1s before refill
   const LID_RADIANS = (115 * Math.PI) / 180;  // lid swing for the upward \/ open
   const DOOR_MS = 650;           // realistic open/close duration (from old files)
-  const PANEL_RISE_MS = 1700;    // slow float of the stat panel up out of the box
-  const FLOAT_MS = 1500;         // slow float of numbers into the box, AFTER panel
+  const FLY_MS = 1200;           // the REAL numbers travelling from field to bin
+  const PANEL_MS = 1000;         // the stat panel floating up AFTER the drop
 
   /* ---- the four tempers ---- */
   const FLR_TEMPERS = ["WO", "FC", "DR", "MA"];
   const TEMPER_META = {
-    WO: { full: "WOE",    color: "#5fe08a", target: 8, sMin: 3, sMax: 5, want: 4, feel: 1.00 },
-    FC: { full: "FROLIC", color: "#e6cf45", target: 8, sMin: 3, sMax: 5, want: 4, feel: 1.15 },
-    DR: { full: "DREAD",  color: "#df5fce", target: 4, sMin: 3, sMax: 4, want: 2, feel: 0.50 },
-    MA: { full: "MALICE", color: "#5f9be0", target: 4, sMin: 3, sMax: 4, want: 2, feel: 0.50 },
+    WO: { full: "WOE",    color: "#5fe08a", target: 4, sMin: 3, sMax: 5, want: 4, feel: 1.15 },
+    FC: { full: "FROLIC", color: "#e6cf45", target: 4, sMin: 3, sMax: 5, want: 4, feel: 1.15 },
+    DR: { full: "DREAD",  color: "#df5fce", target: 2, sMin: 3, sMax: 4, want: 2, feel: 0.90 },
+    MA: { full: "MALICE", color: "#5f9be0", target: 2, sMin: 3, sMax: 4, want: 2, feel: 0.90 },
   };
   const SEL_MIN = 3, SEL_MAX = 16;
 
@@ -95,7 +94,6 @@ export const RefinementFloor = (function () {
       jseed: Math.random() * TAU, jseed2: Math.random() * TAU,
       state: "none",             // none | selected | empty
       glow: 0, born: 0, popping: false, scale: 1,
-      emptyUntil: 0,             // ms timestamp; while > now the slot renders blank
     };
   }
 
@@ -117,7 +115,8 @@ export const RefinementFloor = (function () {
     let want = Math.min(cols * rows, CAP);
     rows = Math.max(1, Math.ceil(want / cols));
 
-    const amp = Math.min(CELL * 0.30, (W / 6) * 0.10);
+    const amp = CELL * 0.025;    // ambient float barely moves — the FIELD is the backdrop;
+                                 // a cluster's shared stir (below) is the only real motion
     const total = cols * rows;
     let rebuilt = false;
     if (nums.length !== total) {
@@ -199,16 +198,39 @@ export const RefinementFloor = (function () {
     }
     if (set.size < 3) return false;
     const cid = nextCid++;
-    clusters.set(cid, { id: cid, temper, cells: [...set] });
+    clusters.set(cid, { id: cid, temper, cells: [...set], stir: 0 });
     for (const i of set) { nums[i].temper = temper; nums[i].cid = cid; }
     return true;
   }
 
+  /* how many units of a temper are still needed across ALL bins */
+  function remainingDemand(t) {
+    const tg = TEMPER_META[t].target;
+    let need = 0;
+    for (const b of bins) need += Math.max(0, tg - b.meters[t]);
+    return need;
+  }
+
   function maintainClusters() {
     for (const t of FLR_TEMPERS) {
-      const want = TEMPER_META[t].want;
+      // a temper that's already balanced in every bin shouldn't keep flooding
+      // the field — drop it to a single faint decoy so attention shifts to
+      // the tempers you still need. Otherwise hold its normal count.
+      const want = remainingDemand(t) > 0 ? TEMPER_META[t].want : 1;
       let have = 0;
-      for (const cl of clusters.values()) if (cl.temper === t) have++;
+      const owned = [];
+      for (const cl of clusters.values()) if (cl.temper === t) { have++; owned.push(cl.id); }
+      // if over the (reduced) target, retire surplus clusters of this temper —
+      // but never one the player currently has selected
+      const hasSelected = (cid) => {
+        const cl = clusters.get(cid);
+        return cl && cl.cells.some((k) => nums[k] && nums[k].state === "selected");
+      };
+      while (have > want && owned.length) {
+        const cid = owned.pop();
+        if (hasSelected(cid)) continue;
+        dissolveCluster(cid); have--;
+      }
       let guard = 0;
       while (have < want && guard++ < 12) {
         if (growOneCluster(t)) have++; else break;
@@ -224,16 +246,21 @@ export const RefinementFloor = (function () {
   }
 
   /* =====================================================
-     SELECTION — paint only the LIVE numbers under the brush.
-     Neutral noise never highlights, so what you grab is always
-     exactly the cluster you swept. Predictable & merciful.
+     SELECTION — manual and literal. WYSIWYG:
+
+       • left click       -> selects exactly ONE digit: the nearest
+                             cell to the (scale-corrected, clamped)
+                             pointer — i.e. the digit the magnifier
+                             is lifting. Tempered or not.
+       • left hold+sweep  -> ADDS every digit the cursor passes over
+                             (the drag path is interpolated so a fast
+                             sweep never skips a cell).
+       • right click      -> clears the whole selection.
+
+     No cluster auto-expansion and no temper filter at selection time:
+     what you click is what highlights. Clusters stay as hidden data
+     for field generation and DROP validation only.
      ===================================================== */
-  function indexAt(px, py) {
-    const c = Math.floor((px - originX()) / CELL);
-    const r = Math.floor((py - originY()) / CELL);
-    if (c < 0 || c >= cols || r < 0 || r >= rows) return -1;
-    return r * cols + c;
-  }
   function clearAll() { for (const n of nums) n.state = "none"; }
   function selectedIndices() {
     const a = [];
@@ -242,23 +269,20 @@ export const RefinementFloor = (function () {
   }
   function selectedCount() { return selectedIndices().length; }
 
-  /* Select by each glyph's ACTUAL drawn position (n.rx/n.ry), not its grid
-     cell. This is pointer-accurate everywhere — including the corners and the
-     field edges, where grid-cell math used to fail — and it follows the float
-     drift the player sees. Brushing any cell of a cluster grabs the whole
-     contiguous cluster. */
+  /* nearest cell to a field point — pointer clamped onto the grid, so
+     edges and corners always resolve to a real digit */
+  function nearestCell(px, py) {
+    const fc = (px - originX()) / CELL - 0.5;
+    const fr = (py - originY()) / CELL - 0.5;
+    const c = Math.round(Math.min(cols - 1, Math.max(0, fc)));
+    const r = Math.round(Math.min(rows - 1, Math.max(0, fr)));
+    return r * cols + c;
+  }
+
   function paintPoint(px, py) {
-    for (let j = 0; j < nums.length; j++) {
-      const n = nums[j];
-      if (!n || !n.temper || n.state === "empty") continue;
-      const gx = (n.rx !== undefined) ? n.rx : cellCenter(j).x;
-      const gy = (n.ry !== undefined) ? n.ry : cellCenter(j).y;
-      if (Math.hypot(gx - px, gy - py) <= BRUSH) {
-        const cl = clusters.get(n.cid);
-        if (cl) { for (const k of cl.cells) if (nums[k]) nums[k].state = "selected"; }
-        else n.state = "selected";
-      }
-    }
+    const n = nums[nearestCell(px, py)];
+    if (!n || n.state === "empty") return;
+    n.state = "selected";
   }
 
   /* interpolate along the drag path so a fast sweep never skips a cluster */
@@ -276,42 +300,51 @@ export const RefinementFloor = (function () {
     lastPaint = { x: px, y: py };
   }
 
-  /* Drop-time validation — returns {ok} or {ok:false, reason}. */
+  /* Drop-time validation. Stray NEUTRAL digits (always clipped when you
+     sweep a cluster) are forgiven: they're reported back as `pruned` so the
+     caller can flicker them out, and only the tempered remainder is judged.
+     Returns {ok, temper, cid, keep, pruned} or {ok:false, reason}. */
   function validateSelection(sel) {
-    if (sel.length < SEL_MIN) return { ok: false, reason: "TOO SMALL" };
-    if (sel.length > SEL_MAX) return { ok: false, reason: "TOO LARGE" };
+    const kept = [], pruned = [];
+    for (const i of sel) (nums[i].temper ? kept : pruned).push(i);
+    if (kept.length === 0)        return { ok: false, reason: "NO TEMPER" };
+    if (kept.length < SEL_MIN)    return { ok: false, reason: "TOO SMALL" };
+    if (kept.length > SEL_MAX)    return { ok: false, reason: "TOO LARGE" };
     const tempers = new Set(), cids = new Set();
-    for (const i of sel) {
-      const n = nums[i];
-      if (!n.temper) return { ok: false, reason: "MIXED TEMPER" };
-      tempers.add(n.temper); cids.add(n.cid);
-    }
+    for (const i of kept) { tempers.add(nums[i].temper); cids.add(nums[i].cid); }
     if (tempers.size > 1) return { ok: false, reason: "MIXED TEMPER" };
     if (cids.size > 1)    return { ok: false, reason: "NON-CONTIGUOUS" };
-    return { ok: true, temper: [...tempers][0], cid: [...cids][0] };
+    return { ok: true, temper: [...tempers][0], cid: [...cids][0], keep: kept, pruned };
   }
 
   /* =====================================================
      POINTER HANDLERS
      ===================================================== */
-  function localPoint(e) {
+  /* pointer -> canvas FIELD coordinates, compensating for any CSS scale
+     on the CRT (getBoundingClientRect is transformed; W/H are not) */
+  function toField(e) {
     const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const sx = r.width ? W / r.width : 1;
+    const sy = r.height ? H / r.height : 1;
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
   }
   function onPointerMove(e) {
     if (busy) return;
-    pointer = localPoint(e);
+    pointer = toField(e);
     if (dragging) { paintAt(pointer.x, pointer.y); hideHint(); }
   }
   function onPointerDown(e) {
     if (busy) return;
     Sound.ensure && Sound.ensure();
+    // right click -> deselect everything (contextmenu is suppressed on the canvas)
+    if (e.button === 2) { clearAll(); return; }
+    if (e.button !== 0 && e.pointerType === "mouse") return;
     isTouch = (e.pointerType === "touch");
-    pointer = localPoint(e);
+    pointer = toField(e);
     lastPaint = { x: -9999, y: -9999 };
-    clearAll();
+    closeAllPeeks();
     dragging = true;
-    paintAt(pointer.x, pointer.y);
+    paintAt(pointer.x, pointer.y);     // ADDITIVE: clicks build the selection
     if (selectedCount() > 0) { Sound.select && Sound.select(); hideHint(); }
     try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
     resetIdle();
@@ -327,35 +360,67 @@ export const RefinementFloor = (function () {
   }
 
   /* =====================================================
-     "FEELING" — per-temper motion signature (cyan, motion-only)
+     "FEELING" — per-temper motion signature (cyan, motion-only).
+
+     Driven by the CLUSTER's shared proximity `stir` (0..1), so the
+     whole cluster moves as one family under the lens. All four tempers
+     are now equally LEGIBLE, each with a clearly distinct character so
+     they're told apart at a glance:
+
+       WO  deep, slow vertical HEAVE          (a heavy sigh)
+       FC  buoyant springy SKIP upward        (bouncing for joy)
+       DR  nervous fast side-to-side RATTLE   (jittering with fear)
+       MA  sharp irregular LURCH/snap         (a vicious twitch)
+
+     and a distinct brightness behaviour each: WO swells slowly, FC
+     pulses warm, DR flickers unsteadily, MA stabs on the lurch.
      ===================================================== */
-  function temperMotion(n, t, prox) {
+  function temperMotion(n, t, stir) {
     const e = TEMPER_META[n.temper].feel;
-    const g = 0.26 + 0.9 * prox;
+    const g = 0.22 + 0.92 * stir;        // faint at rest, full under the lens
     let jx = 0, jy = 0, b = 0;
     switch (n.temper) {
-      case "WO":
-        jy = Math.sin(t * 0.0016 + n.jseed) * 2.0 * e * g;
-        jx = Math.cos(t * 0.0013 + n.jseed) * 0.8 * e * g;
-        b = 0.13 * g; break;
-      case "FC":
-        jy = -Math.abs(Math.sin(t * 0.010 + n.jseed)) * 2.2 * e * g;
-        jx = Math.sin(t * 0.017 + n.jseed) * 1.1 * e * g;
-        b = 0.18 * g; break;
-      case "DR": {
-        const s = Math.sin(t * 0.022 + n.jseed) * Math.sin(t * 0.0033 + n.jseed2);
-        jx = s * 1.0 * e * g;
-        jy = Math.sin(t * 0.019 + n.jseed2) * 0.7 * e * g;
-        b = 0.07 * g; break;
+      case "WO": {  // deep slow vertical heave — a heavy sigh
+        jy = Math.sin(t * 0.0015 + n.jseed) * 3.0 * e * g;
+        jx = Math.cos(t * 0.0010 + n.jseed) * 0.5 * e * g;
+        b = (0.12 + 0.06 * (0.5 + 0.5 * Math.sin(t * 0.0015 + n.jseed))) * g; break;
       }
-      case "MA": {
-        const phase = Math.sin(t * 0.004 + n.jseed);
-        jx = (phase > 0.70 ? Math.sin(t * 0.085 + n.jseed2) : 0) * 1.3 * e * g;
-        jy = (phase > 0.82 ? Math.sin(t * 0.078) : 0) * 0.9 * e * g;
-        b = 0.07 * g; break;
+      case "FC": {  // buoyant springy skip — bouncing upward for joy
+        jy = -Math.abs(Math.sin(t * 0.007 + n.jseed)) * 3.0 * e * g;
+        jx = Math.sin(t * 0.013 + n.jseed) * 0.7 * e * g;
+        b = (0.15 + 0.07 * Math.abs(Math.sin(t * 0.007 + n.jseed))) * g; break;
+      }
+      case "DR": {  // nervous fast side-to-side rattle — jittering with fear
+        jx = Math.sin(t * 0.020 + n.jseed) * 2.4 * e * g;
+        jy = Math.sin(t * 0.030 + n.jseed2) * 0.8 * e * g;
+        // unsteady flicker
+        b = (0.10 + 0.10 * Math.abs(Math.sin(t * 0.020 + n.jseed))) * g; break;
+      }
+      case "MA": {  // sharp irregular lurch/snap — a vicious twitch
+        const phase = Math.sin(t * 0.0028 + n.jseed);
+        const burst = phase > 0.75 ? 1 : 0;          // sudden, then still
+        jx = burst * Math.sin(t * 0.080 + n.jseed2) * 2.2 * e * g;
+        jy = burst * Math.cos(t * 0.075 + n.jseed) * 1.1 * e * g;
+        b = (0.09 + (burst ? 0.14 : 0)) * g; break;  // stabs bright on the lurch
       }
     }
     return { jx, jy, b };
+  }
+
+  /* per-frame: each cluster's `stir` = smoothed proximity of its CLOSEST
+     cell to the cursor, so all its cells move as a group */
+  function updateClusterStir() {
+    const px = pointer.x, py = pointer.y, hasP = px > -9000;
+    for (const cl of clusters.values()) {
+      let best = 0;
+      if (hasP) for (const idx of cl.cells) {
+        const ctr = cellCenter(idx);
+        const d = Math.hypot(ctr.x - px, ctr.y - py);
+        if (d < LENS_R) { const k = 1 - d / LENS_R; const s = k * k * (3 - 2 * k); if (s > best) best = s; }
+      }
+      const prev = cl.stir || 0;
+      cl.stir = reduced ? best : prev + (best - prev) * 0.18;   // ease toward target
+    }
   }
 
   /* =====================================================
@@ -364,13 +429,14 @@ export const RefinementFloor = (function () {
   function frame(t) {
     if (!running) return;
     ctx.clearRect(0, 0, W, H);
+    updateClusterStir();
     const ox = originX(), oy = originY();
     const px = pointer.x, py = pointer.y, hasP = px > -9000;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
 
     for (let i = 0; i < nums.length; i++) {
       const n = nums[i];
-      // a freshly-binned slot renders blank for EMPTY_MS
+      // a freshly-binned slot renders blank until it is refilled
       if (n.state === "empty") continue;
       const c = i % cols, r = Math.floor(i / cols);
       const bx = ox + c * CELL + CELL / 2;
@@ -390,11 +456,13 @@ export const RefinementFloor = (function () {
       }
       const mag = 1 + LENS_MAX * near;
 
-      // the feeling
+      // the feeling — driven by the whole cluster's shared stir
       let feel = 0;
       if (n.temper) {
+        const cl = clusters.get(n.cid);
+        const stir = cl ? (cl.stir || 0) : near;
         if (reduced) feel = 0.12;
-        else { const m = temperMotion(n, t, near); cx += m.jx; cy += m.jy; feel = m.b; }
+        else { const m = temperMotion(n, t, stir); cx += m.jx; cy += m.jy; feel = m.b; }
       }
 
       // remember where this glyph is actually drawn (for pointer-accurate selection)
@@ -419,8 +487,16 @@ export const RefinementFloor = (function () {
       a = Math.min(1, a);
 
       if (sel) {
-        ctx.fillStyle = `rgba(214,238,251,${a})`;
-        ctx.shadowColor = "rgba(127,223,255,0.95)"; ctx.shadowBlur = 13 + near * 9;
+        // a SELECTED tempered digit reads white-hot; a caught NEUTRAL
+        // glows visibly dimmer/cooler, so you can read your group before
+        // committing it to a bin (these neutrals get pruned on drop).
+        if (n.temper) {
+          ctx.fillStyle = `rgba(220,242,253,${a})`;
+          ctx.shadowColor = "rgba(150,235,255,0.95)"; ctx.shadowBlur = 14 + near * 9;
+        } else {
+          ctx.fillStyle = `rgba(150,176,196,0.78)`;
+          ctx.shadowColor = "rgba(120,160,185,0.45)"; ctx.shadowBlur = 4 + near * 5;
+        }
       } else {
         ctx.fillStyle = `rgba(140,226,255,${a})`;
         ctx.shadowColor = "rgba(127,223,255,0.6)"; ctx.shadowBlur = 3 + near * 13;
@@ -436,17 +512,36 @@ export const RefinementFloor = (function () {
      at the box mouth, swinging UP and OUTWARD (\/), with a growing
      perspective shadow. No front-face rectangle — just the lids.
      Driven by one openProgress (0..1) and tweened by setDoorOpen.
-     ===================================================== */
+
+     ── JOINT COORDINATES — TUNE HERE ─────────────────────────────
+     The SVG viewBox is 0..100 wide and 0..60 tall, stretched
+     (preserveAspectRatio="none") over the .floor-box__door element,
+     which spans EXACTLY the bin rectangle (CSS: left:0; right:0;
+     bottom:0; height:78px in style.css). Therefore:
+       · 1 horizontal unit = binWidth / 100 px
+       · 1 vertical unit   = 78 / 60 = 1.3 px
+     The two constants below position the hinge joints:
+       HINGE_INSET_X — distance of each joint from its bin corner,
+         in horizontal units. 0 = stroke centre exactly on the bin's
+         outer corner. Positive moves BOTH joints inward (toward the
+         centre); negative pushes them outward past the corners.
+       HINGE_LIFT_Y — height of the joints above the bin's top edge,
+         in vertical units. 0 = stroke centre sits ON the bin's top
+         border (the joint visually merges with the box). Positive
+         lifts the hinge line up off the bin.
+     To move ONLY one side, edit hL.x / hR.x directly below.
+     ─────────────────────────────────────────────────────────────── */
+  const HINGE_INSET_X = 1.0;
+  const HINGE_LIFT_Y = -0.6;
+
   function lidSVG(openProgress) {
     const VW = 100, VH = 60;
-    const boxW = 86;                          // mouth width (= lid span)
     const shadowOffsetMax = 6;
-    const startX = (VW - boxW) / 2;
-    const mouthY = VH - 6;                     // hinge line sits near the BOTTOM
+    const mouthY = VH - HINGE_LIFT_Y;             // hinge line height
 
-    const hL = { x: startX, y: mouthY };          // left hinge (mouth corner)
-    const hR = { x: startX + boxW, y: mouthY };   // right hinge (mouth corner)
-    const mid = { x: startX + boxW / 2, y: mouthY };
+    const hL = { x: 0 + HINGE_INSET_X, y: mouthY };   // left joint  (bin top-left corner)
+    const hR = { x: VW - HINGE_INSET_X, y: mouthY };  // right joint (bin top-right corner)
+    const mid = { x: (hL.x + hR.x) / 2, y: mouthY };
 
     const rad = openProgress * LID_RADIANS;
 
@@ -479,18 +574,39 @@ export const RefinementFloor = (function () {
     if (host) host.innerHTML = lidSVG(v);
   }
 
-  /* eased tween; snaps instantly under reduced motion */
-  function tween(ms, ease, onUpdate) {
+  /* per-bin door animator — the lids tween open/closed for EVERY use:
+     hover peeks, dumps, and the close after the panel sinks back. A new
+     target retargets the running animation smoothly (rapid hover in/out). */
+  let doorAnims = [];
+  function makeDoorAnims() {
+    doorAnims = bins.map(() => ({ prog: 0, target: 0, raf: null, done: null }));
+  }
+  function animateDoor(i, target) {
     return new Promise((resolve) => {
-      if (reduced || ms <= 0) { onUpdate(1); return resolve(); }
-      const start = performance.now();
+      const d = doorAnims[i];
+      if (!d) return resolve();
+      d.target = target;
+      if (reduced) { d.prog = target; setDoorOpen(i, target); return resolve(); }
+      if (d.raf) {            // retarget: settle the previous promise
+        cancelAnimationFrame(d.raf); d.raf = null;
+        if (d.done) { d.done(); d.done = null; }
+      }
+      d.done = resolve;
+      let last = performance.now();
       (function step(now) {
-        const k = Math.min(1, (now - start) / ms);
-        onUpdate(ease ? ease(k) : k);
-        if (k < 1) requestAnimationFrame(step); else resolve();
-      })(performance.now());
+        const dt = Math.min(50, now - last); last = now;
+        const dir = Math.sign(d.target - d.prog) || 1;
+        d.prog += (dir * dt) / DOOR_MS;
+        const arrived = dir > 0 ? d.prog >= d.target : d.prog <= d.target;
+        if (arrived) d.prog = d.target;
+        setDoorOpen(i, easeInOut(Math.max(0, Math.min(1, d.prog))));
+        if (arrived) { d.raf = null; const f = d.done; d.done = null; f && f(); return; }
+        d.raf = requestAnimationFrame(step);
+      })(last);
     });
   }
+
+  /* easing shared by the door animator */
   const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 
   /* =====================================================
@@ -499,7 +615,7 @@ export const RefinementFloor = (function () {
      ===================================================== */
   function makeBins() {
     bins = [];
-    for (let i = 0; i < BIN_COUNT; i++) bins.push({ meters: { WO: 0, FC: 0, DR: 0, MA: 0 }, pinned: false });
+    for (let i = 0; i < BIN_COUNT; i++) bins.push({ meters: { WO: 0, FC: 0, DR: 0, MA: 0 }, pinned: false, hover: false });
   }
   function binComplete(b) { return FLR_TEMPERS.every((t) => b.meters[t] >= TEMPER_META[t].target); }
   function binProgress(b) {
@@ -530,11 +646,11 @@ export const RefinementFloor = (function () {
       el.dataset.bin = i;
       el.innerHTML = `
         <div class="floor-box">
-          <div class="floor-box__panel">
-            <div class="floor-box__code">${code}</div>
-            <div class="floor-box__meters">${meters}</div>
+          <div class="floor-box__reveal">
+            <div class="floor-box__panel">
+              <div class="floor-box__meters">${meters}</div>
+            </div>
           </div>
-          <div class="floor-box__base">${code}</div>
           <div class="floor-box__door" id="floor-door-${i}">${lidSVG(0)}</div>
         </div>
         <div class="floor-bin__head">${code}</div>
@@ -543,17 +659,55 @@ export const RefinementFloor = (function () {
           <span class="floor-bin__bar"><span class="floor-bin__pct floor-bin__pct--fill">0%</span></span>
         </div>`;
       el.addEventListener("click", () => onBinTap(i));
-      el.addEventListener("pointerenter", () => { if (!busy) openBin(i, true); });
-      el.addEventListener("pointerleave", () => { if (!busy && !bins[i].pinned) openBin(i, false); });
+      el.addEventListener("pointerenter", () => onBinEnter(i));
+      el.addEventListener("pointerleave", () => onBinLeave(i));
       binsEl.appendChild(el);
     });
+    makeDoorAnims();
     refreshBins();
   }
 
-  function openBin(i, on) {
-    const el = $$(".floor-bin", binsEl)[i];
-    if (el) el.classList.toggle("is-open", on);
-    setDoorOpen(i, on ? 1 : 0);
+  const binEl = (i) => $$(".floor-bin", binsEl)[i];
+
+  /* HOVER PEEK — only when NO numbers are selected (a player about to
+     dump shouldn't be distracted). The door swings open and the panel
+     floats up out of it; on leave the panel sinks and the lids close. */
+  function onBinEnter(i) {
+    bins[i].hover = true;
+    if (busy || bins[i].pinned || selectedCount() > 0) return;
+    peekBin(i, true);
+  }
+  function onBinLeave(i) {
+    bins[i].hover = false;
+    if (busy || bins[i].pinned) return;
+    peekBin(i, false);
+  }
+  function peekBin(i, on) {
+    const el = binEl(i);
+    if (!el) return;
+    if (on) {
+      el.classList.add("is-open");
+      // the lids must FULLY open first; only then does the panel float in.
+      // If the pointer left (or a dump started) mid-swing, skip the panel —
+      // animateDoor's retargeting resolves this promise early in that case.
+      animateDoor(i, 1).then(() => {
+        if (bins[i].hover && !busy && !bins[i].pinned && doorAnims[i] && doorAnims[i].prog >= 1) {
+          el.classList.add("show-panel");
+        }
+      });
+    } else {
+      el.classList.remove("show-panel");          // panel floats back down…
+      animateDoor(i, 0).then(() => {              // …while the lids swing shut
+        if (!bins[i].hover && !bins[i].pinned) el.classList.remove("is-open");
+      });
+    }
+  }
+  function closeAllPeeks() {
+    bins.forEach((b, i) => {
+      if (b.pinned) return;
+      const el = binEl(i);
+      if (el && el.classList.contains("is-open")) peekBin(i, false);
+    });
   }
 
   function refreshBins() {
@@ -580,7 +734,9 @@ export const RefinementFloor = (function () {
   const wait = (ms) => new Promise((res) => (reduced ? res() : setTimeout(res, ms)));
 
   /* =====================================================
-     BIN TAP — validate, then open / fly / credit / close
+     BIN TAP — validate, then: door opens -> the REAL numbers leave
+     the field and drop into the bin -> the stat panel floats up ->
+     credit -> panel sinks -> door closes -> empty slots refill.
      ===================================================== */
   async function onBinTap(i) {
     if (busy) return;
@@ -597,69 +753,92 @@ export const RefinementFloor = (function () {
       resetIdle();
       return;
     }
+    // this bin's meter for that temper is already balanced — reject instead of
+    // fake-rewarding overflow that the completion clamp would silently discard
+    if (bins[i].meters[v.temper] >= TEMPER_META[v.temper].target) {
+      Sound.err && Sound.err();
+      showNope("O" + (i + 1) + " " + v.temper + " FULL");
+      clearAll();
+      resetIdle();
+      return;
+    }
 
     busy = true;
     resetIdle();
     bins[i].pinned = true;
-    const el = $$(".floor-bin", binsEl)[i];
-    if (el) el.classList.add("is-open");
+    const el = binEl(i);
+    if (el) {
+      el.classList.remove("show-panel");   // no panel yet — it comes AFTER the drop
+      el.classList.add("is-open");
+    }
 
-    const cluster = clusters.get(v.cid);
-    const cells = cluster ? cluster.cells.slice() : sel.slice();
+    // forgive stray neutrals: they flicker off the selection and stay on the
+    // field; only the tempered group (v.keep) is dropped into the bin
+    if (v.pruned && v.pruned.length) {
+      for (const idx of v.pruned) nums[idx].state = "none";
+    }
+    const cells = v.keep.slice();
     const amount = cells.length;
-    const rect = canvas.getBoundingClientRect();
-    const flyers = cells.map((idx) => {
-      const ctr = cellCenter(idx);
-      nums[idx].state = "selected";
-      return { idx, val: nums[idx].val, sx: rect.left + ctr.x, sy: rect.top + ctr.y };
-    });
+    for (const idx of cells) nums[idx].state = "selected";   // glow while the lids part
 
-    // 1. DOOR OPENS — line-lids swing UP (\/); the panel then floats up
+    // 1. DOOR OPENS — line-lids swing UP (\/); the selection waits, glowing
     Sound.settle && Sound.settle();
-    await tween(DOOR_MS, easeInOut, (k) => setDoorOpen(i, k));
+    await animateDoor(i, 1);
 
-    // 2. wait for the stat panel to float slowly up out of the box
-    await wait(PANEL_RISE_MS);
+    // 2. THE NUMBERS THEMSELVES leave: snapshot each glyph's ACTUAL drawn
+    //    position (scale-corrected to the screen), blank its slot in the
+    //    same instant, and fly the real digits into the bin mouth. No
+    //    doppelgängers — the grid visibly gives the numbers up.
+    const rect = canvas.getBoundingClientRect();
+    const kx = rect.width / (W || 1), ky = rect.height / (H || 1);
+    const flyers = cells.map((idx) => {
+      const n = nums[idx];
+      const fx = (n.rx !== undefined) ? n.rx : cellCenter(idx).x;
+      const fy = (n.ry !== undefined) ? n.ry : cellCenter(idx).y;
+      return { idx, val: n.val, sx: rect.left + fx * kx, sy: rect.top + fy * ky };
+    });
+    // the spent cluster dissolves: any UNSELECTED remainder reverts to a
+    // neutral digit (it stays on the field; only the selection departs)
+    dissolveCluster(v.cid);
+    for (const s of flyers) {
+      const n = nums[s.idx];
+      n.temper = null; n.cid = -1;
+      n.state = "empty"; n.glow = 0;       // the slot is now genuinely vacant
+    }
+    if (sel.length > 0) { Sound.key && Sound.key(); }
+    await flyIntoBin(i, flyers, kx);
 
-    // 3. numbers float in SLOWLY, only after the panel has emerged
-    await flyIntoPanel(i, flyers);
+    // 3. only once the drop is complete does the stat panel float up
+    if (el) el.classList.add("show-panel");
+    await wait(PANEL_MS);
 
-    // 4. credit the meter once the numbers have arrived; bar + tally climb
+    // 4. credit the meter, capped at the target; bar + tally climb
     const wasComplete = binComplete(bins[i]);
-    bins[i].meters[v.temper] += amount;
+    const tg = TEMPER_META[v.temper].target;
+    bins[i].meters[v.temper] = Math.min(tg, bins[i].meters[v.temper] + amount);
     refreshBins();
     tickHex();
     Sound.chime && Sound.chime();
     Corporate && Corporate.friendly && Corporate.friendly();
     if (el) { el.classList.remove("floor-bin--settle"); void el.offsetWidth; el.classList.add("floor-bin--settle"); }
 
-    await wait(420);                       // let the meter be read
+    await wait(900);                       // let the meters be read
 
-    // 4. DOOR CLOSES — realistic lid swing back
-    await tween(DOOR_MS, easeInOut, (k) => setDoorOpen(i, 1 - k));
-    setDoorOpen(i, 0);
+    // 5. the panel floats back down, then the lids swing shut
+    if (el) el.classList.remove("show-panel");
+    await wait(450);
+    await animateDoor(i, 0);
     bins[i].pinned = false;
     if (el) el.classList.remove("is-open");
 
-    // 5. the slots the numbers left stay EMPTY for one second
-    dissolveCluster(v.cid);
-    const emptyUntil = performance.now() + EMPTY_MS;
-    for (const s of flyers) {
-      const n = nums[s.idx];
-      n.temper = null; n.cid = -1;
-      n.state = "empty"; n.glow = 0;
-      n.emptyUntil = emptyUntil;
-    }
-    await wait(EMPTY_MS);
-
-    // 6. refill those slots with fresh digits and a bouncy pop
+    // 6. the vacated slots (empty since the drop) refill with a bouncy pop
     const now = performance.now();
     for (const s of flyers) {
       const n = nums[s.idx];
       if (n.state !== "empty") continue;
       n.val = rnd10(); n.temper = null; n.cid = -1;
       n.state = "none"; n.glow = 0; n.scale = 0.2;
-      n.born = now; n.popping = true; n.emptyUntil = 0;
+      n.born = now; n.popping = true;
       n.horizontal = Math.random() < 0.5;
       n.phase = Math.random() * TAU;
       n.jseed = Math.random() * TAU; n.jseed2 = Math.random() * TAU;
@@ -673,35 +852,40 @@ export const RefinementFloor = (function () {
     if (fileProgress() >= 1) onFileComplete();
   }
 
-  function flyIntoPanel(i, selected) {
+  /* the real digits travel from their exact field positions into the bin
+     mouth (the hinge line at the top of the bin head), shrinking and
+     fading only as they pass inside. */
+  function flyIntoBin(i, flyers, kx) {
     return new Promise((resolve) => {
-      if (reduced || selected.length === 0) return resolve();
-      const panel = $$(".floor-bin", binsEl)[i].querySelector(".floor-box__panel");
-      const br = panel.getBoundingClientRect();
-      const tx = br.left + br.width / 2, ty = br.top + br.height / 2;
-      const secs = (FLOAT_MS / 1000).toFixed(2) + "s";
-      const flyers = [];
-      selected.forEach((s, k) => {
+      if (reduced || flyers.length === 0) return resolve();
+      const head = binEl(i).querySelector(".floor-bin__head");
+      const hr = head.getBoundingClientRect();
+      const tx = hr.left + hr.width / 2;
+      const ty = hr.top + hr.height * 0.3;
+      const secs = (FLY_MS / 1000).toFixed(2) + "s";
+      const fadeDelay = Math.max(0, FLY_MS - 340);
+      const nodes = [];
+      flyers.forEach((s, k) => {
+        const d = k * 55;
         const f = document.createElement("div");
         f.className = "floor-flyer";
         f.textContent = s.val;
-        f.style.fontSize = "20px";
-        f.style.transition = `transform ${secs} var(--ease) ${(k * 70)}ms, opacity ${secs} var(--ease) ${(k * 70)}ms`;
-        f.style.transform = `translate(${s.sx}px, ${s.sy}px) scale(2)`;
+        f.style.fontSize = Math.max(12, 17 * kx).toFixed(1) + "px";
+        f.style.transition = `transform ${secs} var(--ease) ${d}ms, opacity .34s ease ${d + fadeDelay}ms`;
+        f.style.transform = `translate(${s.sx}px, ${s.sy}px) translate(-50%,-50%) scale(1)`;
         f.style.opacity = "1";
         document.body.appendChild(f);
-        flyers.push(f);
-        nums[s.idx].state = "none";
+        nodes.push(f);
       });
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        flyers.forEach((f) => {
-          const j = (Math.random() - 0.5) * 22;
-          f.style.transform = `translate(${tx + j}px, ${ty}px) scale(0.3)`;
+        nodes.forEach((f) => {
+          const j = (Math.random() - 0.5) * 14;
+          f.style.transform = `translate(${tx + j}px, ${ty}px) translate(-50%,-50%) scale(0.32)`;
           f.style.opacity = "0";
         });
       }));
-      const last = (selected.length - 1) * 70;
-      setTimeout(() => { flyers.forEach((f) => f.remove()); resolve(); }, FLOAT_MS + last + 60);
+      const last = (flyers.length - 1) * 55;
+      setTimeout(() => { nodes.forEach((f) => f.remove()); resolve(); }, FLY_MS + last + 80);
     });
   }
 
@@ -825,6 +1009,10 @@ export const RefinementFloor = (function () {
     if (!canvas) return;
     ctx = canvas.getContext("2d");
     hintEl = $("#floor-hint");
+    if (hintEl) hintEl.textContent =
+      "Sweep the magnifier across the field — a group of numbers that stirs " +
+      "together belongs together. Gather it (a stray neutral or two is fine) " +
+      "and drop it into any bin. Right-click clears.";
     binsEl = $("#floor-bins");
     buildNope();
 
@@ -837,6 +1025,10 @@ export const RefinementFloor = (function () {
     canvas.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointerleave", onPointerLeave);
+    canvas.addEventListener("contextmenu", (e) => {   // right click = deselect all
+      e.preventDefault();
+      if (!busy) clearAll();
+    });
     window.addEventListener("resize", () => { if (running) layout(); });
   }
 
