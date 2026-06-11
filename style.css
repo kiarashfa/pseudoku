@@ -764,7 +764,8 @@ body.is-editing .crt-head__bar {
   position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
   border: 1px solid var(--line-strong); margin-bottom: 18px; overflow: hidden;
 }
-.waffle__video iframe { position: relative; z-index: 2; display: block; }
+.waffle__video iframe,
+.waffle__video video { position: relative; z-index: 2; display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .waffle__video-fallback {
   position: absolute; inset: 0; z-index: 1; display: flex; align-items: center;
   justify-content: center; padding: 20px; text-align: center;
@@ -1324,16 +1325,11 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   border-bottom: 2px solid var(--cyan);
   box-shadow: 0 0 8px rgba(127,223,255,.4);
 }
-.crt-head__globe { width: clamp(56px, 6.5vw, 92px); height: auto; flex: none; align-self: center; }
-.crt-head__globe .g-ring,
-.crt-head__globe .g-line {
-  fill: none; stroke: var(--cyan); stroke-width: 1.4;
-  filter: drop-shadow(0 0 4px rgba(127,223,255,.5));
+.crt-head__globe {
+  width: clamp(56px, 6.5vw, 92px); height: auto; flex: none; align-self: center;
+  color: var(--cyan); overflow: visible;
 }
-.crt-head__globe .g-text {
-  fill: var(--glow); font-family: var(--sans); font-weight: 800;
-  font-size: 13px; letter-spacing: .14em;
-}
+.crt-head__globe use { filter: drop-shadow(0 0 4px rgba(127,223,255,.5)); }
 .crt-head__bar {
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: center; gap: clamp(8px, 1.4vw, 16px);
@@ -1551,16 +1547,11 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   font-size: clamp(14px, 2vw, 23px); letter-spacing: .01em;
   color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.55); white-space: nowrap;
 }
-.floor-head__globe { width: clamp(58px, 7vw, 96px); height: auto; flex: none; align-self: center; }
-.floor-head__globe .g-ring,
-.floor-head__globe .g-line {
-  fill: none; stroke: var(--cyan); stroke-width: 1.4;
-  filter: drop-shadow(0 0 4px rgba(127,223,255,.5));
+.floor-head__globe {
+  width: clamp(58px, 7vw, 96px); height: auto; flex: none; align-self: center;
+  color: var(--cyan); overflow: visible;
 }
-.floor-head__globe .g-text {
-  fill: var(--glow); font-family: var(--sans); font-weight: 800;
-  font-size: 13px; letter-spacing: .14em;
-}
+.floor-head__globe use { filter: drop-shadow(0 0 4px rgba(127,223,255,.5)); }
 
 /* ---------- number field ---------- */
 .floor-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }

@@ -4,12 +4,35 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Lumon Industries — Macrodata Refinement</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Archivo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%2240%2080%20920%20440%22%3E%3Cdefs%3E%3CclipPath%20id%3D%22gc%22%3E%3Cellipse%20cx%3D%22500%22%20cy%3D%22300%22%20rx%3D%22420%22%20ry%3D%22220%22%2F%3E%3C%2FclipPath%3E%3Cmask%20id%3D%22tm%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%221000%22%20height%3D%22600%22%20fill%3D%22white%22%2F%3E%3Crect%20x%3D%22180%22%20y%3D%22225%22%20width%3D%22640%22%20height%3D%22150%22%20fill%3D%22black%22%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%237fdfff%22%20stroke-width%3D%229%22%20clip-path%3D%22url%28%23gc%29%22%20mask%3D%22url%28%23tm%29%22%3E%3Cline%20x1%3D%220%22%20y1%3D%22180%22%20x2%3D%221000%22%20y2%3D%22180%22%2F%3E%3Cline%20x1%3D%220%22%20y1%3D%22420%22%20x2%3D%221000%22%20y2%3D%22420%22%2F%3E%3Cellipse%20cx%3D%22500%22%20cy%3D%22300%22%20rx%3D%22140%22%20ry%3D%22220%22%2F%3E%3Cellipse%20cx%3D%22500%22%20cy%3D%22300%22%20rx%3D%22280%22%20ry%3D%22220%22%2F%3E%3C%2Fg%3E%3Cellipse%20cx%3D%22500%22%20cy%3D%22300%22%20rx%3D%22420%22%20ry%3D%22220%22%20fill%3D%22none%22%20stroke%3D%22%237fdfff%22%20stroke-width%3D%229%22%2F%3E%3Cg%20fill%3D%22%237fdfff%22%20fill-rule%3D%22evenodd%22%3E%3Cpath%20d%3D%22M%20190%2C245%20L%20190%2C355%20L%20280%2C355%20L%20280%2C327%20L%20218%2C327%20L%20218%2C245%20Z%22%2F%3E%3Cpath%20d%3D%22M%20305%2C245%20V%20327%20A%2028%2C28%200%200%2C0%20333%2C355%20H%20382%20A%2028%2C28%200%200%2C0%20410%2C327%20V%20245%20H%20382%20V%20327%20H%20333%20V%20245%20Z%22%2F%3E%3Cpath%20d%3D%22M%20430%2C245%20L%20430%2C355%20L%20458%2C355%20L%20458%2C285%20L%20486%2C330%20L%20494%2C330%20L%20522%2C285%20L%20522%2C355%20L%20550%2C355%20L%20550%2C245%20L%20522%2C245%20L%20490%2C296%20L%20458%2C245%20Z%22%2F%3E%3Cpath%20d%3D%22M%20600%2C245%20H%20655%20A%2030%2C30%200%200%2C1%20685%2C275%20V%20325%20A%2030%2C30%200%200%2C1%20655%2C355%20H%20600%20A%2030%2C30%200%200%2C1%20570%2C325%20V%20275%20A%2030%2C30%200%200%2C1%20600%2C245%20Z%20M%20627.5%2C278%20Q%20613.5%2C305%20613.5%2C310%20A%2014%2C14%200%200%2C0%20641.5%2C310%20Q%20641.5%2C305%20627.5%2C278%20Z%22%2F%3E%3Cpath%20d%3D%22M%20705%2C245%20L%20705%2C355%20L%20733%2C355%20L%20733%2C285%20L%20782%2C355%20L%20810%2C355%20L%20810%2C245%20L%20782%2C245%20L%20782%2C315%20L%20733%2C245%20Z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E" />
+<link rel="stylesheet" href="fonts.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+<!-- ============ LUMON LOGO (shared inline symbol) ============ -->
+<!-- The official wordmark-in-globe, defined once and referenced via <use>
+     in every CRT header (and as the data-URI favicon in <head>). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <clipPath id="lumonGlobeClip"><ellipse cx="500" cy="300" rx="420" ry="220"/></clipPath>
+  <mask id="lumonTextMask"><rect x="0" y="0" width="1000" height="600" fill="white"/><rect x="180" y="225" width="640" height="150" fill="black"/></mask>
+  <symbol id="lumon-logo" viewBox="0 0 1000 600">
+    <g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="butt" clip-path="url(#lumonGlobeClip)" mask="url(#lumonTextMask)">
+      <line x1="0" y1="180" x2="1000" y2="180"/>
+      <line x1="0" y1="420" x2="1000" y2="420"/>
+      <ellipse cx="500" cy="300" rx="140" ry="220"/>
+      <ellipse cx="500" cy="300" rx="280" ry="220"/>
+    </g>
+    <ellipse cx="500" cy="300" rx="420" ry="220" fill="none" stroke="currentColor" stroke-width="9"/>
+    <g fill="currentColor" fill-rule="evenodd">
+      <path d="M 190,245 L 190,355 L 280,355 L 280,327 L 218,327 L 218,245 Z"/>
+      <path d="M 305,245 V 327 A 28,28 0 0,0 333,355 H 382 A 28,28 0 0,0 410,327 V 245 H 382 V 327 H 333 V 245 Z"/>
+      <path d="M 430,245 L 430,355 L 458,355 L 458,285 L 486,330 L 494,330 L 522,285 L 522,355 L 550,355 L 550,245 L 522,245 L 490,296 L 458,245 Z"/>
+      <path d="M 600,245 H 655 A 30,30 0 0,1 685,275 V 325 A 30,30 0 0,1 655,355 H 600 A 30,30 0 0,1 570,325 V 275 A 30,30 0 0,1 600,245 Z M 627.5,278 Q 613.5,305 613.5,310 A 14,14 0 0,0 641.5,310 Q 641.5,305 627.5,278 Z"/>
+      <path d="M 705,245 L 705,355 L 733,355 L 733,285 L 782,355 L 810,355 L 810,245 L 782,245 L 782,315 L 733,245 Z"/>
+    </g>
+  </symbol>
+</defs></svg>
 
 <!-- ============ ATMOSPHERE OVERLAYS ============ -->
 <div class="crt-scanlines" aria-hidden="true"></div>
@@ -28,15 +51,7 @@
 
       <!-- shared header: globe mark + title -->
       <div class="crt-head">
-        <svg class="crt-head__globe" viewBox="0 0 120 70" aria-hidden="true">
-          <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
-          <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
-          <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
-          <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
-          <path class="g-line" d="M16 19 Q60 31 104 19"></path>
-          <path class="g-line" d="M16 51 Q60 39 104 51"></path>
-          <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
-        </svg>
+        <svg class="crt-head__globe" viewBox="0 0 1000 600" aria-hidden="true"><use href="#lumon-logo"></use></svg>
         <div class="crt-head__bar">
           <span class="crt-head__name">LUMON INDUSTRIES</span>
           <span class="crt-head__dept">MACRODATA REFINEMENT</span>
@@ -109,15 +124,7 @@
 
     <!-- shared CRT header: globe mark + title + live progress tally -->
     <div class="crt-head">
-      <svg class="crt-head__globe" viewBox="0 0 120 70" aria-hidden="true">
-        <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
-        <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
-        <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
-        <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
-        <path class="g-line" d="M16 19 Q60 31 104 19"></path>
-        <path class="g-line" d="M16 51 Q60 39 104 51"></path>
-        <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
-      </svg>
+      <svg class="crt-head__globe" viewBox="0 0 1000 600" aria-hidden="true"><use href="#lumon-logo"></use></svg>
       <div class="crt-head__bar">
         <span class="crt-head__name">MACRODATA REFINEMENT</span>
         <span class="crt-head__tally" aria-hidden="true">
@@ -354,15 +361,7 @@
           <span class="floor-head__pct"><span id="floor-completion">0</span>% Complete</span>
         </div>
         <!-- generated geometric globe mark (NOT a real logo) -->
-        <svg class="floor-head__globe" viewBox="0 0 120 70" aria-hidden="true">
-          <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
-          <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
-          <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
-          <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
-          <path class="g-line" d="M16 19 Q60 31 104 19"></path>
-          <path class="g-line" d="M16 51 Q60 39 104 51"></path>
-          <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
-        </svg>
+        <svg class="floor-head__globe" viewBox="0 0 1000 600" aria-hidden="true"><use href="#lumon-logo"></use></svg>
       </div>
 
       <!-- the number field -->
@@ -400,15 +399,7 @@
 
       <!-- shared CRT header: globe mark + title + return control -->
       <div class="crt-head">
-        <svg class="crt-head__globe" viewBox="0 0 120 70" aria-hidden="true">
-          <ellipse class="g-ring" cx="60" cy="35" rx="54" ry="30"></ellipse>
-          <ellipse class="g-line" cx="60" cy="35" rx="20" ry="30"></ellipse>
-          <ellipse class="g-line" cx="60" cy="35" rx="40" ry="30"></ellipse>
-          <line class="g-line" x1="7" y1="35" x2="113" y2="35"></line>
-          <path class="g-line" d="M16 19 Q60 31 104 19"></path>
-          <path class="g-line" d="M16 51 Q60 39 104 51"></path>
-          <text class="g-text" x="60" y="40" text-anchor="middle">LUMON</text>
-        </svg>
+        <svg class="crt-head__globe" viewBox="0 0 1000 600" aria-hidden="true"><use href="#lumon-logo"></use></svg>
         <div class="crt-head__bar">
           <span class="crt-head__name">ABOUT THIS PROJECT</span>
         </div>

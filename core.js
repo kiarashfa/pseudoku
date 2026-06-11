@@ -7,7 +7,7 @@
      util                  $, $$, fmtTime, toast
      SudokuEngine          pure solver / generator / validator (no DOM)
      Store                 localStorage-backed session state
-     Sound                 WebAudio blips + ambient hum
+     Sound                 .ogg sample playback + synth ambient hum
      Corporate             tiered corporate-message system
      Field                 intake drifting-number canvas
      Interstitial          the "FILE ACCEPTED / COMPLETE" beat
@@ -652,23 +652,88 @@ export const Store = (function () {
   return { get, set, all: () => state };
 })();
 
-/* ---- Sound ---- */
+/* ---- Sound ----
+   File-backed one-shot samples (decoded WebAudio buffers) plus the synthesized
+   ambient office hum. Every UI cue now plays a real .ogg from /soundfx; the hum
+   stays procedural.
+
+   Event → file mapping:
+     key→beep   select→pop   ok→card    err→close
+     settle→bin chime→open   done→tada  alarm→lumon
+   Two ambient one-shots round it out:
+     boot    — plays once, on the first audio unlock (the site "booting up")
+     loading — the "FILE ACCEPTED" transition + the solver sweep
+*/
 export const Sound = (function () {
+  const SFX = "soundfx/";
+  // event → [filename, gain]
+  const SAMPLES = {
+    key:     ["beep.ogg",    0.5],
+    select:  ["pop.ogg",     0.6],
+    ok:      ["card.ogg",    0.7],
+    err:     ["close.ogg",   0.7],
+    settle:  ["bin.ogg",     0.4],
+    chime:   ["open.ogg",    0.7],
+    done:    ["tada.ogg",    0.85],
+    alarm:   ["lumon.ogg",   0.85],
+    boot:    ["boot.ogg",    0.7],
+    loading: ["loading.ogg", 0.6],
+  };
+
   let ctx = null;
+  const buffers = {};      // name → decoded AudioBuffer (lazy)
+  let booted = false;      // boot.ogg fires only once per page load
+  let loadingSrc = null;   // the live loading source, so it never stacks
+
   function ensure() {
-    if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (!ctx) {
+      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { return null; }
+      preload();
+    }
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    // first unlock (a real user gesture) → the boot chime, once
+    if (!booted) { booted = true; if (!Store.get("muted")) play("boot"); }
     return ctx;
   }
-  function blip(freq = 440, dur = 0.05, type = "sine", gain = 0.04) {
+
+  // Decode every sample up-front so cues fire with no first-hit latency.
+  function preload() {
+    Object.keys(SAMPLES).forEach((name) => {
+      if (buffers[name]) return;
+      fetch(SFX + SAMPLES[name][0])
+        .then((r) => r.arrayBuffer())
+        .then((b) => ctx.decodeAudioData(b))
+        .then((decoded) => { buffers[name] = decoded; })
+        .catch(() => {}); // a missing/blocked sample simply stays silent
+    });
+  }
+
+  function play(name) {
     if (Store.get("muted")) return;
-    const c = ensure(); if (!c) return;
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.value = gain;
-    o.connect(g); g.connect(c.destination);
-    o.start();
-    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
-    o.stop(c.currentTime + dur + 0.02);
+    if (!ensure()) return;
+    const spec = SAMPLES[name]; if (!spec) return;
+    const fire = (buf) => {
+      if (Store.get("muted")) return;
+      // loading is a longer bed — never let two play over each other
+      if (name === "loading" && loadingSrc) { try { loadingSrc.stop(); } catch (e) {} loadingSrc = null; }
+      const src = ctx.createBufferSource(), g = ctx.createGain();
+      src.buffer = buf; g.gain.value = spec[1];
+      src.connect(g); g.connect(ctx.destination);
+      src.start();
+      if (name === "loading") {
+        loadingSrc = src;
+        src.onended = () => { if (loadingSrc === src) loadingSrc = null; };
+      }
+    };
+    const buf = buffers[name];
+    if (buf) { fire(buf); return; }
+    // not decoded yet → fetch+decode, then play
+    fetch(SFX + spec[0])
+      .then((r) => r.arrayBuffer())
+      .then((b) => ctx.decodeAudioData(b))
+      .then((decoded) => { buffers[name] = decoded; fire(decoded); })
+      .catch(() => {});
   }
 
   // Low ambient hum — sterile office drone. Toggled via Store.ambient.
@@ -694,14 +759,15 @@ export const Sound = (function () {
   }
 
   return {
-    key:    () => blip(620, 0.04, "square", 0.025),
-    select: () => blip(380, 0.03, "sine", 0.02),
-    ok:     () => blip(720, 0.08, "sine", 0.04),
-    err:    () => blip(160, 0.12, "sawtooth", 0.05),
-    settle: () => blip(880 + Math.random() * 200, 0.05, "sine", 0.03),
-    chime:  () => { blip(880, 0.18, "sine", 0.035); setTimeout(() => blip(1320, 0.22, "sine", 0.025), 90); },
-    done:   () => { blip(523, 0.1); setTimeout(() => blip(659, 0.1), 110); setTimeout(() => blip(784, 0.18), 220); },
-    alarm:  () => { blip(220, 0.25, "sawtooth", 0.05); setTimeout(() => blip(180, 0.3, "sawtooth", 0.05), 180); },
+    key:     () => play("key"),
+    select:  () => play("select"),
+    ok:      () => play("ok"),
+    err:     () => play("err"),
+    settle:  () => play("settle"),
+    chime:   () => play("chime"),
+    done:    () => play("done"),
+    alarm:   () => play("alarm"),
+    loading: () => play("loading"),
     refreshHum, ensure,
   };
 })();
@@ -843,7 +909,9 @@ export const Interstitial = (function () {
     el.querySelector(".interstitial__text").textContent = text;
     el.classList.remove("show"); void el.offsetWidth;
     el.classList.add("show");
-    Sound.ok();
+    // "FILE ACCEPTED" is the intake/transition beat → the loading bed; every
+    // other interstitial keeps the short confirmation cue.
+    if (/FILE ACCEPTED/i.test(text)) Sound.loading(); else Sound.ok();
     setTimeout(() => el.classList.remove("show"), 800);
   }
   return { show };

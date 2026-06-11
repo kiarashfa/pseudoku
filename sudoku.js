@@ -323,6 +323,7 @@ export const Console = (function () {
     setSolverState("refining");
     const sweep = $("#grid-sweep");
     sweep.classList.remove("is-active"); void sweep.offsetWidth; sweep.classList.add("is-active");
+    Sound.loading && Sound.loading(); // loading bed under the solver sweep
 
     // ceremonious fill: settle empties one-by-one in reading order
     const empties = [];
@@ -625,8 +626,9 @@ export const BreakRoom = (function () {
 })();
 
 export const WaffleParty = (function () {
-  // Severance "Music Dance Experience" scene. If unavailable, graceful fallback.
-  const YT_ID = "GW2Goq5R-4o";
+  // Severance "Music Dance Experience" scene — a self-hosted clip shipped with
+  // the project (relative path). If it cannot play, a graceful fallback shows.
+  const VIDEO_SRC = "files/video.mp4";
   let confettiLoaded = false;
 
   function showBanner() {
@@ -723,18 +725,26 @@ export const WaffleParty = (function () {
 
   function mountVideo() {
     const wrap = $("#waffle-video");
-    wrap.innerHTML =
-      '<iframe width="100%" height="100%" ' +
-      'src="https://www.youtube.com/embed/' + YT_ID + '?rel=0" ' +
-      'title="Music Dance Experience" frameborder="0" ' +
-      'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" ' +
-      'allowfullscreen></iframe>';
-    // graceful fallback if the iframe is blocked/unavailable
+    // graceful fallback sits behind the video (z-index) for when it can't play
     const fb = document.createElement("div");
     fb.className = "waffle__video-fallback";
     fb.innerHTML = 'If the celebration does not appear, the Music Dance Experience ' +
       'is temporarily out of reach. The dance lives on in your heart.';
     wrap.appendChild(fb);
+
+    const vid = document.createElement("video");
+    vid.className = "waffle__video-el";
+    vid.src = VIDEO_SRC;
+    vid.title = "Music Dance Experience";
+    vid.controls = true;
+    vid.autoplay = true;
+    vid.playsInline = true;
+    vid.setAttribute("playsinline", ""); // iOS Safari attribute form
+    wrap.appendChild(vid);
+    // the modal opens off a user action, so autoplay-with-sound is allowed;
+    // if the browser still blocks it, the controls remain for manual play.
+    const p = vid.play();
+    if (p && p.catch) p.catch(() => {});
   }
 
   // Original CSS/JS pixel-art dancer — tiny waving figure (no copyrighted art).
