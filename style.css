@@ -1327,7 +1327,7 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   box-shadow: 0 0 8px rgba(127,223,255,.4);
 }
 .crt-head__globe {
-  width: clamp(56px, 6.5vw, 92px); height: auto; flex: none; align-self: center;
+  width: clamp(56px, 6.5vw, 98px); height: auto; flex: none; align-self: center;
   color: var(--cyan); overflow: visible;
 }
 .crt-head__globe use { filter: drop-shadow(0 0 4px rgba(127,223,255,.5)); }
@@ -1549,7 +1549,7 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.55); white-space: nowrap;
 }
 .floor-head__globe {
-  width: clamp(58px, 7vw, 96px); height: auto; flex: none; align-self: center;
+  width: clamp(58px, 7vw, 98px); height: auto; flex: none; align-self: center;
   color: var(--cyan); overflow: visible;
 }
 .floor-head__globe use { filter: drop-shadow(0 0 4px rgba(127,223,255,.5)); }
