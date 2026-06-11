@@ -671,24 +671,24 @@ export const Sound = (function () {
   const SFX = "soundfx/";
   // event → [filename, gain, poolSize]
   const SAMPLES = {
-    boot:     ["boot.ogg",     0.70, 2], // "FILE ACCEPTED" page transition (console/floor/about)
-    loading:  ["loading.ogg",  0.60, 1], // solver sweep when REFINE FILE is pressed
+    boot:     ["boot.ogg",     0.40, 2], // "FILE ACCEPTED" page transition (console/floor/about)
+    loading:  ["loading.ogg",  0.50, 1], // solver sweep when REFINE FILE is pressed
     type:     ["keys.ogg",     0.50, 6], // terminal typing (repeats a lot)
     key:      ["keys.ogg",     0.45, 4], // number / keypad entry, manual givens, OCR cell edit
     select:   ["pop.ogg",      0.60, 3], // UI clicks + navigation
-    ok:       ["card.ogg",     0.70, 3], // confirm / accept + OCR file/camera buttons
-    err:      ["beep.ogg",     0.55, 4], // rejected / invalid / error-nature events
+    ok:       ["card.ogg",     0.90, 3], // confirm / accept + OCR file/camera buttons
+    err:      ["beep.ogg",     0.50, 5], // rejected / invalid / error-nature events
     chime:    ["card.ogg",     0.60, 2], // positive milestone (solve / reveal / bin credit / OCR open)
-    done:     ["tada.ogg",     0.85, 2], // celebration: confetti burst + floor file complete
-    report:   ["lumon.ogg",    0.85, 2], // the Refinement Report window opening
-    glitch:   ["glitch.ogg",   0.80, 2], // unsettling easter eggs (break room / helly / hatch)
-    reset:    ["elevator.ogg", 0.80, 1], // the RESET button
-    mouse:    ["mouse.ogg",    0.60, 3], // floor: number selection (released click / brush)
-    swoosh:   ["swoosh.ogg",   0.60, 3], // floor: the selection starts flying toward a bin
-    dump:     ["bin.ogg",      0.60, 3], // floor: the numbers land / are dumped in the bin
-    process:  ["process.ogg",  0.70, 1], // optical intake: reading numerals from the image
-    binOpen:  ["open.ogg",     0.70, 2], // floor: a bin's lids swing open
-    binClose: ["close.ogg",    0.70, 2], // floor: a bin's lids swing shut
+    done:     ["tada.ogg",     0.75, 2], // celebration: confetti burst + floor file complete
+    report:   ["lumon.ogg",    0.75, 2], // the Refinement Report window opening
+    glitch:   ["glitch.ogg",   0.85, 2], // unsettling easter eggs (break room / helly / hatch)
+    reset:    ["elevator.ogg", 0.50, 1], // the RESET button
+    mouse:    ["mouse.ogg",    0.75, 4], // floor: number selection (released click / brush)
+    swoosh:   ["swoosh.ogg",   0.95, 2], // floor: the selection starts flying toward a bin
+    dump:     ["bin.ogg",      0.95, 2], // floor: the numbers land / are dumped in the bin
+    process:  ["process.ogg",  0.70, 4], // optical intake: reading numerals from the image
+    binOpen:  ["open.ogg",     0.90, 2], // floor: a bin's lids swing open
+    binClose: ["close.ogg",    0.90, 2], // floor: a bin's lids swing shut
   };
 
   let ctx = null;
