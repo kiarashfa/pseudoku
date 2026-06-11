@@ -285,7 +285,12 @@
 
      </div><!-- /.console-main -->
 
-      <!-- bottom stats strip: 4 bordered cells (Floor-bin styling) -->
+    </div><!-- /.console-body -->
+
+      <!-- bottom stats strip: 4 bordered cells (Floor-bin styling).
+           A direct child of .crt__fit (sibling of body + footer) so it can drop
+           to the bottom of the glass like the Floor's bins, instead of riding
+           with the centered body. -->
       <section class="console-stats" aria-label="Refinement statistics">
         <div class="cstat">
           <span class="cstat__label">Files Refined</span>
@@ -304,8 +309,6 @@
           <span class="cstat__value"><span id="error-count">0</span><small> / <span id="error-threshold">5</span></small></span>
         </div>
       </section>
-
-    </div>
 
     <!-- shared footer: time · paired hex code · department -->
     <div class="crt-foot">

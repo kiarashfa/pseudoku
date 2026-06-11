@@ -1467,11 +1467,26 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
 .crt__fit[data-fit="none"] {
   transform: scale(1.012);
 }
-/* The console pins its readout to the TOP of the glass (not vertically
-   centered) so the header sits at the same height as the Floor's "Cold
-   Harbour" header — no big empty band above the title box. The scaler still
-   shrinks from here if the content would overflow. */
-#console-crt .crt__fit { justify-content: flex-start; }
+/* The console's children (head · body · stats · foot) are all content-sized —
+   none can grow to push things to the edges, because the body must report its
+   honest height for the Fit scaler (it's flex:0 0 auto). So on desktop we use
+   AUTO TOP-MARGINS to distribute spare vertical space: one above the body and
+   one above the stats strip. The header pins to the top, the body floats
+   centered in the upper region, and the stats strip drops to the bottom just
+   above the footer — mirroring the Floor's bins. Auto margins only ever absorb
+   SPARE space (a roomy / zoomed-out viewport); the instant the content fills or
+   overflows the glass they collapse to 0, so the readout stacks at its true
+   height and the scaler measures it honestly and shrinks uniformly — no empty
+   band, no clipping.
+   Scoped to desktop (min-width:861px): the mobile rule above intentionally
+   keeps flex-start + vertical scroll with everything stacked, and since this
+   rule sits later in the file it would otherwise win the equal-specificity tie
+   and clobber it. */
+@media (min-width: 861px) {
+  #console-crt .crt__fit { justify-content: flex-start; }
+  #console-crt .console-body,
+  #console-crt .console-stats { margin-top: auto; }
+}
 
 /* scanlines (above content) */
 .crt__scan {
