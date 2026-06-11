@@ -240,11 +240,14 @@ export const OpticalIntake = (function () {
     setWork(null, 8, "Requesting optical clearance.");
     try {
       await loadOpenCV();
+      Sound.process && Sound.process();
       setWork(null, 55, "Optical core authorized.");
       await loadTesseract();
+      Sound.process && Sound.process();
       setWork(null, 80, "Numeric reader authorized.");
       // warm a reusable Tesseract worker tuned for single digits
       await ensureWorker();
+      Sound.process && Sound.process();
       setWork(null, 100, "Clearance granted.");
       assetsReady = true;
       return true;
@@ -283,7 +286,7 @@ export const OpticalIntake = (function () {
       return;
     }
     renderWorking("EXTRACTING NUMERIC CONTENT...");
-    Sound.process && Sound.process(); // the "reading numerals" working cue again
+    Sound.process && Sound.process();
     // allow the working panel to paint before heavy sync CV work
     await raf2();
 
@@ -298,10 +301,12 @@ export const OpticalIntake = (function () {
       }
       warp = detected.warpMat;
       await raf2();
+      Sound.process && Sound.process();
       setWork(null, 35, "Segmenting 81 cells.");
       const seg = segmentCells(warp, detected.sideLen); // { canvases[81], ink[81] }
       await raf2();
 
+      Sound.process && Sound.process();
       setWork("EXTRACTING NUMERIC CONTENT...", 45, "Reading numerals.");
       const { values, conf } = await Recognizer.classifyCells(seg, (done) => {
         setWork(null, 45 + Math.round((done / 81) * 50), "Reading numerals (" + done + "/81).");
