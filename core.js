@@ -654,36 +654,46 @@ export const Store = (function () {
 
 /* ---- Sound ----
    File-backed one-shot samples (decoded WebAudio buffers) plus the synthesized
-   ambient office hum. Every UI cue now plays a real .ogg from /soundfx; the hum
+   ambient office hum. Every UI cue plays a real .ogg from /soundfx; the hum
    stays procedural.
 
-   Event → file mapping:
-     key→beep   select→pop   ok→card    err→close
-     settle→bin chime→open   done→tada  alarm→lumon
-   Two ambient one-shots round it out:
-     boot    — plays once, on the first audio unlock (the site "booting up")
-     loading — the "FILE ACCEPTED" transition + the solver sweep
+   Each event is [filename, gain, poolSize]. WebAudio buffer sources are already
+   polyphonic, so rapid repeats never get cut off; the pool size is a *voice cap*
+   on top of that — when more than `poolSize` copies of the same cue are sounding
+   at once, the oldest is stolen. That keeps fast typing crisp without letting a
+   burst (e.g. the refine sweep) stack into a clipping wall. pool 1 = "restart,
+   never overlap" (used for the long boot / loading beds).
+
+   A few events deliberately share a file (type+key = keys, ok+chime = card);
+   the buffer is fetched/decoded once per file.
 */
 export const Sound = (function () {
   const SFX = "soundfx/";
-  // event → [filename, gain]
+  // event → [filename, gain, poolSize]
   const SAMPLES = {
-    key:     ["beep.ogg",    0.5],
-    select:  ["pop.ogg",     0.6],
-    ok:      ["card.ogg",    0.7],
-    err:     ["close.ogg",   0.7],
-    settle:  ["bin.ogg",     0.4],
-    chime:   ["open.ogg",    0.7],
-    done:    ["tada.ogg",    0.85],
-    alarm:   ["lumon.ogg",   0.85],
-    boot:    ["boot.ogg",    0.7],
-    loading: ["loading.ogg", 0.6],
+    boot:     ["boot.ogg",     0.70, 2], // "FILE ACCEPTED" page transition (console/floor/about)
+    loading:  ["loading.ogg",  0.60, 1], // solver sweep when REFINE FILE is pressed
+    type:     ["keys.ogg",     0.50, 6], // terminal typing (repeats a lot)
+    key:      ["keys.ogg",     0.45, 4], // number / keypad entry, manual givens, OCR cell edit
+    select:   ["pop.ogg",      0.60, 3], // UI clicks + navigation
+    ok:       ["card.ogg",     0.70, 3], // confirm / accept + OCR file/camera buttons
+    err:      ["beep.ogg",     0.55, 4], // rejected / invalid / error-nature events
+    chime:    ["card.ogg",     0.60, 2], // positive milestone (solve / reveal / bin credit / OCR open)
+    done:     ["tada.ogg",     0.85, 2], // celebration: confetti burst + floor file complete
+    report:   ["lumon.ogg",    0.85, 2], // the Refinement Report window opening
+    glitch:   ["glitch.ogg",   0.80, 2], // unsettling easter eggs (break room / helly / hatch)
+    reset:    ["elevator.ogg", 0.80, 1], // the RESET button
+    mouse:    ["mouse.ogg",    0.60, 3], // floor: number selection (released click / brush)
+    swoosh:   ["swoosh.ogg",   0.60, 3], // floor: the selection starts flying toward a bin
+    dump:     ["bin.ogg",      0.60, 3], // floor: the numbers land / are dumped in the bin
+    process:  ["process.ogg",  0.70, 1], // optical intake: reading numerals from the image
+    binOpen:  ["open.ogg",     0.70, 2], // floor: a bin's lids swing open
+    binClose: ["close.ogg",    0.70, 2], // floor: a bin's lids swing shut
   };
 
   let ctx = null;
-  const buffers = {};      // name → decoded AudioBuffer (lazy)
-  let booted = false;      // boot.ogg fires only once per page load
-  let loadingSrc = null;   // the live loading source, so it never stacks
+  const buffers = {};      // filename → decoded AudioBuffer (shared across events)
+  const voices = {};       // event name → array of currently-sounding sources
 
   function ensure() {
     if (!ctx) {
@@ -692,19 +702,17 @@ export const Sound = (function () {
       preload();
     }
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    // first unlock (a real user gesture) → the boot chime, once
-    if (!booted) { booted = true; if (!Store.get("muted")) play("boot"); }
     return ctx;
   }
 
-  // Decode every sample up-front so cues fire with no first-hit latency.
+  // Decode every distinct file up-front so cues fire with no first-hit latency.
   function preload() {
-    Object.keys(SAMPLES).forEach((name) => {
-      if (buffers[name]) return;
-      fetch(SFX + SAMPLES[name][0])
+    new Set(Object.values(SAMPLES).map((s) => s[0])).forEach((file) => {
+      if (buffers[file]) return;
+      fetch(SFX + file)
         .then((r) => r.arrayBuffer())
         .then((b) => ctx.decodeAudioData(b))
-        .then((decoded) => { buffers[name] = decoded; })
+        .then((decoded) => { buffers[file] = decoded; })
         .catch(() => {}); // a missing/blocked sample simply stays silent
     });
   }
@@ -713,26 +721,32 @@ export const Sound = (function () {
     if (Store.get("muted")) return;
     if (!ensure()) return;
     const spec = SAMPLES[name]; if (!spec) return;
+    const [file, gain, pool] = spec;
     const fire = (buf) => {
       if (Store.get("muted")) return;
-      // loading is a longer bed — never let two play over each other
-      if (name === "loading" && loadingSrc) { try { loadingSrc.stop(); } catch (e) {} loadingSrc = null; }
-      const src = ctx.createBufferSource(), g = ctx.createGain();
-      src.buffer = buf; g.gain.value = spec[1];
-      src.connect(g); g.connect(ctx.destination);
-      src.start();
-      if (name === "loading") {
-        loadingSrc = src;
-        src.onended = () => { if (loadingSrc === src) loadingSrc = null; };
+      const live = (voices[name] || []).filter((s) => s._on);
+      // voice cap: steal the oldest sounding voice when the pool is full
+      while (live.length >= (pool || 1)) {
+        const old = live.shift();
+        try { old.stop(); } catch (e) {}
+        old._on = false;
       }
+      const src = ctx.createBufferSource(), g = ctx.createGain();
+      src.buffer = buf; g.gain.value = gain;
+      src.connect(g); g.connect(ctx.destination);
+      src._on = true;
+      src.onended = () => { src._on = false; };
+      src.start();
+      live.push(src);
+      voices[name] = live;
     };
-    const buf = buffers[name];
+    const buf = buffers[file];
     if (buf) { fire(buf); return; }
     // not decoded yet → fetch+decode, then play
-    fetch(SFX + spec[0])
+    fetch(SFX + file)
       .then((r) => r.arrayBuffer())
       .then((b) => ctx.decodeAudioData(b))
-      .then((decoded) => { buffers[name] = decoded; fire(decoded); })
+      .then((decoded) => { buffers[file] = decoded; fire(decoded); })
       .catch(() => {});
   }
 
@@ -759,15 +773,24 @@ export const Sound = (function () {
   }
 
   return {
-    key:     () => play("key"),
-    select:  () => play("select"),
-    ok:      () => play("ok"),
-    err:     () => play("err"),
-    settle:  () => play("settle"),
-    chime:   () => play("chime"),
-    done:    () => play("done"),
-    alarm:   () => play("alarm"),
-    loading: () => play("loading"),
+    boot:     () => play("boot"),
+    loading:  () => play("loading"),
+    type:     () => play("type"),
+    key:      () => play("key"),
+    select:   () => play("select"),
+    ok:       () => play("ok"),
+    err:      () => play("err"),
+    chime:    () => play("chime"),
+    done:     () => play("done"),
+    report:   () => play("report"),
+    glitch:   () => play("glitch"),
+    reset:    () => play("reset"),
+    mouse:    () => play("mouse"),
+    swoosh:   () => play("swoosh"),
+    dump:     () => play("dump"),
+    process:  () => play("process"),
+    binOpen:  () => play("binOpen"),
+    binClose: () => play("binClose"),
     refreshHum, ensure,
   };
 })();
@@ -909,9 +932,11 @@ export const Interstitial = (function () {
     el.querySelector(".interstitial__text").textContent = text;
     el.classList.remove("show"); void el.offsetWidth;
     el.classList.add("show");
-    // "FILE ACCEPTED" is the intake/transition beat → the loading bed; every
-    // other interstitial keeps the short confirmation cue.
-    if (/FILE ACCEPTED/i.test(text)) Sound.loading(); else Sound.ok();
+    // The interstitial itself is silent for "FILE ACCEPTED": real page changes
+    // (console/floor/about) sound boot.ogg in their own handlers, while loading
+    // a file into the already-open console (OCR / manual SET) already cued ok.
+    // Other interstitials (FILE COMPLETE, BOX BALANCED…) keep the short cue.
+    if (!/FILE ACCEPTED/i.test(text)) Sound.ok();
     setTimeout(() => el.classList.remove("show"), 800);
   }
   return { show };

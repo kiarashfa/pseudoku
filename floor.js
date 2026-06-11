@@ -69,6 +69,7 @@ export const RefinementFloor = (function () {
   const EMPTY_SET = new Set();
 
   let dragging = false;
+  let countAtDown = 0; // selection size at press, to tell a brush from a tap
   let isTouch = false;
   let pointer = { x: -9999, y: -9999 };
   let lastPaint = { x: -9999, y: -9999 };   // previous brush point (path fill)
@@ -345,12 +346,16 @@ export const RefinementFloor = (function () {
     closeAllPeeks();
     dragging = true;
     paintAt(pointer.x, pointer.y);     // ADDITIVE: clicks build the selection
-    if (selectedCount() > 0) { Sound.select && Sound.select(); hideHint(); }
+    // mouse.ogg on the press itself (a single click OR the start of a brush),
+    // then again on release only if the brush grew the selection — so a brush
+    // is bookended by a cue while a plain click sounds exactly once.
+    countAtDown = selectedCount();
+    if (countAtDown > 0) { Sound.mouse && Sound.mouse(); hideHint(); }
     try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
     resetIdle();
   }
   function onPointerUp() {
-    if (dragging && selectedCount() > 0) Sound.key && Sound.key();
+    if (dragging && selectedCount() > countAtDown) Sound.mouse && Sound.mouse();
     dragging = false;
     lastPaint = { x: -9999, y: -9999 };
   }
@@ -782,7 +787,7 @@ export const RefinementFloor = (function () {
     for (const idx of cells) nums[idx].state = "selected";   // glow while the lids part
 
     // 1. DOOR OPENS — line-lids swing UP (\/); the selection waits, glowing
-    Sound.settle && Sound.settle();
+    Sound.binOpen && Sound.binOpen();
     await animateDoor(i, 1);
 
     // 2. THE NUMBERS THEMSELVES leave: snapshot each glyph's ACTUAL drawn
@@ -805,8 +810,9 @@ export const RefinementFloor = (function () {
       n.temper = null; n.cid = -1;
       n.state = "empty"; n.glow = 0;       // the slot is now genuinely vacant
     }
-    if (sel.length > 0) { Sound.key && Sound.key(); }
+    if (sel.length > 0) { Sound.swoosh && Sound.swoosh(); } // numbers take flight
     await flyIntoBin(i, flyers, kx);
+    Sound.dump && Sound.dump();                              // …and land in the bin
 
     // 3. only once the drop is complete does the stat panel float up
     if (el) el.classList.add("show-panel");
@@ -827,6 +833,7 @@ export const RefinementFloor = (function () {
     // 5. the panel floats back down, then the lids swing shut
     if (el) el.classList.remove("show-panel");
     await wait(450);
+    Sound.binClose && Sound.binClose();
     await animateDoor(i, 0);
     bins[i].pinned = false;
     if (el) el.classList.remove("is-open");

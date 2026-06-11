@@ -218,7 +218,9 @@ const Terminal = (function () {
     input = $("#terminal-input");
     log = $("#terminal-log");
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { route(input.value); input.value = ""; }
+      if (e.key === "Enter") { route(input.value); input.value = ""; return; }
+      // per-keystroke keyboard click (printable chars + backspace)
+      if (e.key === "Backspace" || e.key.length === 1) Sound.type();
     });
     write("LUMON terminal ready. Type HELP.", "t-sys");
   }
@@ -257,6 +259,7 @@ const App = (function () {
 
   function goConsole() {
     const intake = $("#screen-intake"), con = $("#screen-console");
+    Sound.boot(); // page transition cue
     // brief "FILE ACCEPTED" interstitial beat
     Interstitial.show("FILE ACCEPTED");
     intake.classList.remove("screen--active");
@@ -298,6 +301,7 @@ const App = (function () {
   /* Phase 4: enter / leave the standalone Refinement Floor mini-game. */
   function goFloor() {
     const intake = $("#screen-intake"), floor = $("#screen-floor");
+    Sound.boot(); // page transition cue
     Interstitial.show("FILE ACCEPTED");
     intake.classList.remove("screen--active");
     setTimeout(() => {
@@ -332,6 +336,7 @@ const App = (function () {
   /* About — a static read-only screen hosted in the shared CRT monitor. */
   function goAbout() {
     const intake = $("#screen-intake"), about = $("#screen-about");
+    Sound.boot(); // About has no FILE ACCEPTED beat, so sound the transition here
     intake.classList.remove("screen--active");
     setTimeout(() => {
       intake.hidden = true;
@@ -539,6 +544,9 @@ const App = (function () {
   function keyboard(e) {
     // grid keyboard only when console is active
     if ($("#screen-console").hidden) return;
+    // an open modal owns the keyboard (e.g. the Optical Intake review grid) —
+    // don't leak number keys into the console grid behind it
+    if (document.querySelector(".modal.show")) return;
     const tag = document.activeElement && document.activeElement.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
 
@@ -669,18 +677,20 @@ const App = (function () {
     });
     setTemper(Store.get("temper"));
 
-    $("#begin-btn").addEventListener("click", () => { Sound.ok(); goConsole(); });
+    // The "FILE ACCEPTED" transition plays boot.ogg (see goConsole/goFloor/goAbout),
+    // so these entry buttons don't sound on their own — boot is the page-change cue.
+    $("#begin-btn").addEventListener("click", () => { goConsole(); });
     $("#return-btn").addEventListener("click", () => { Sound.select(); goIntake(); });
 
     // About — an in-CRT screen, like the Refinement Floor
     const aboutBtn = $("#about-btn");
-    if (aboutBtn) aboutBtn.addEventListener("click", () => { Sound.ok(); goAbout(); });
+    if (aboutBtn) aboutBtn.addEventListener("click", () => { goAbout(); });
     const aboutReturn = $("#about-return-btn");
     if (aboutReturn) aboutReturn.addEventListener("click", () => { Sound.select(); goAboutBack(); });
 
     // Phase 4: Refinement Floor entry + return
     const floorBtn = $("#floor-btn");
-    if (floorBtn) floorBtn.addEventListener("click", () => { Sound.ok(); goFloor(); });
+    if (floorBtn) floorBtn.addEventListener("click", () => { goFloor(); });
     const floorReturn = $("#floor-return-btn");
     if (floorReturn) floorReturn.addEventListener("click", () => { Sound.select(); goFloorBack(); });
 
@@ -692,7 +702,7 @@ const App = (function () {
 
     // RESET! — wipe saved stats after an explicit confirmation
     const resetBtn = $("#reset-btn");
-    if (resetBtn) resetBtn.addEventListener("click", () => { Sound.select(); ResetConfirm.open(); });
+    if (resetBtn) resetBtn.addEventListener("click", () => { Sound.reset(); ResetConfirm.open(); });
 
     // PROTOCOLS drawer — a mobile-only collapsible tray holding the management
     // actions + custom intake. On desktop the toggle is hidden via CSS and the

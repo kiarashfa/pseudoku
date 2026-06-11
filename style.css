@@ -761,7 +761,8 @@ body.is-editing .crt-head__bar {
 }
 .waffle__sub { font-size: 11px; letter-spacing: .15em; color: var(--text-dim); margin-bottom: 20px; }
 .waffle__video {
-  position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
+  /* match the clip's native 1280×592 so it fills with no letterbox bars */
+  position: relative; width: 100%; aspect-ratio: 1280 / 592; background: #000;
   border: 1px solid var(--line-strong); margin-bottom: 18px; overflow: hidden;
 }
 .waffle__video iframe,

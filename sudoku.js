@@ -129,21 +129,30 @@ export const Console = (function () {
       grid[selected] = 0;
     } else {
       grid[selected] = v;
-      // anomaly tracking: wrong vs solution OR creates a conflict
+      // wrong-vs-solution drives anomaly tracking only (stats / break-room).
       const wrong = solution[selected] && v !== solution[selected];
+      // The cue must follow what the GRID shows, never the hidden solution: the
+      // error sound fires only when the entry is a VISIBLE conflict (the same
+      // condition that paints cell--conflict red). A digit that disagrees with
+      // the solution but makes no duplicate looks valid, so it sounds valid too
+      // — keys.ogg + the settle flourish, identical to a correct entry. The
+      // sound never tips the player off to a mistake the screen hasn't revealed.
+      const visibleConflict = SudokuEngine.findConflicts(grid).has(selected);
+      if (visibleConflict) {
+        Sound.err();
+      } else {
+        Sound.key();
+        cells[selected].classList.add("cell--settle");
+        setTimeout(() => cells[selected] && cells[selected].classList.remove("cell--settle"), 460);
+      }
       if (wrong) {
         errorCount++;
-        Sound.err();
         Corporate.passive();
         if (errorCount >= ERROR_THRESHOLD) {
           persist(); render(); updateStats();
           BreakRoom.open(() => { errorCount = 0; updateStats(); });
           return;
         }
-      } else {
-        Sound.key();
-        cells[selected].classList.add("cell--settle");
-        setTimeout(() => cells[selected] && cells[selected].classList.remove("cell--settle"), 460);
       }
     }
     persist();
@@ -237,7 +246,7 @@ export const Console = (function () {
       if (isFull && !wasFull) {
         bin.classList.remove("bin--settle"); void bin.offsetWidth;
         bin.classList.add("bin--settle");
-        Sound.settle();
+        Sound.chime(); // (retired console bins — dead path, kept valid)
         Corporate.friendly();
       }
     });
@@ -328,7 +337,7 @@ export const Console = (function () {
     // ceremonious fill: settle empties one-by-one in reading order
     const empties = [];
     for (let i = 0; i < 81; i++) if (grid[i] === 0) empties.push(i);
-    const stepDur = Math.max(8, Math.min(40, 900 / Math.max(1, empties.length)));
+    const stepDur = Math.max(30, Math.min(120, 1400 / Math.max(1, empties.length)));
     let k = 0;
     (function tick() {
       if (k >= empties.length) {
@@ -343,7 +352,7 @@ export const Console = (function () {
       cell.textContent = work[idx];
       cell.classList.add("cell--entered", "cell--settle");
       setTimeout(() => cell.classList.remove("cell--settle"), 420);
-      Sound.settle();
+      // no per-cell cue here — the solver sweep is carried by loading.ogg alone
       updateStats();
       setTimeout(tick, stepDur);
     })();
@@ -533,10 +542,10 @@ export const Console = (function () {
     });
     $("#refine-btn").addEventListener("click", refine);
     $("#check-btn").addEventListener("click", check);
-    $("#clear-btn").addEventListener("click", clearEntries);
-    $("#new-btn").addEventListener("click", () => newPuzzle(Store.get("temper")));
+    $("#clear-btn").addEventListener("click", () => { Sound.select(); clearEntries(); });
+    $("#new-btn").addEventListener("click", () => { Sound.select(); newPuzzle(Store.get("temper")); });
     const reportBtn = $("#report-btn");
-    if (reportBtn) reportBtn.addEventListener("click", () => { Sound.select(); RefinementReport.open(); });
+    if (reportBtn) reportBtn.addEventListener("click", () => { RefinementReport.open(); });
     $("#paste-btn").addEventListener("click", () => loadFromString($("#paste-input").value));
     $("#paste-input").addEventListener("keydown", (e) => {
       if (e.key === "Enter") loadFromString($("#paste-input").value);
@@ -619,7 +628,7 @@ export const BreakRoom = (function () {
     affirm.style.letterSpacing = "0.04em";
     const el = $("#breakroom");
     el.classList.add("show");
-    Sound.alarm();
+    Sound.glitch();
   }
 
   return { open };
@@ -657,6 +666,7 @@ export const WaffleParty = (function () {
   }
 
   function burst(confettiFn) {
+    Sound.done && Sound.done(); // celebratory "tada" rides with the confetti
     const fire = confettiFn || window.confetti;
     if (!fire) return;
     const end = Date.now() + 1400;
@@ -800,7 +810,7 @@ export const WaffleParty = (function () {
     mountVideo();
     mountPixel();
     $("#waffle-modal").classList.add("show");
-    Sound.done();
+    // no cue here — the video auto-plays, so an overlapping sting isn't wanted
     Corporate.friendly();
   }
 
@@ -944,7 +954,7 @@ export const RefinementReport = (function () {
     }
 
     $("#report-modal").classList.add("show");
-    Sound.chime();
+    Sound.report(); // lumon.ogg announces the Refinement Report
 
     // Gentle one-time nudge: if no name is on file, invite the user to claim
     // the certificate as their own. Purely additive — never blocks the report.
@@ -1107,7 +1117,7 @@ export const Reveals = (function () {
   // HELLY — red rebellion takeover: invert palette to alarm-red, defiant line.
   function helly() {
     document.body.classList.add("rebellion");
-    Sound.alarm();
+    Sound.glitch();
     const el = overlay(`
       <div class="helly-line">I AM A PERSON.</div>
       <div class="helly-sub">— HELLY R.</div>
@@ -1129,7 +1139,7 @@ export const Reveals = (function () {
   // 4 8 15 16 23 42 — LOST Hatch takeover, brief and affectionate.
   function hatch() {
     document.body.classList.add("hatch");
-    Sound.alarm();
+    Sound.glitch();
     const el = overlay(`
       <div class="hatch-counter" id="hatch-counter">4 8 15 16 23 42</div>
       <div class="hatch-fail">SYSTEM FAILURE</div>

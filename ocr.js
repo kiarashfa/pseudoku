@@ -49,7 +49,31 @@ export const OpticalIntake = (function () {
       </div>`;
     document.body.appendChild(el);
     el.addEventListener("click", (e) => { if (e.target.dataset.close) close(); });
+    // physical-keyboard support for the review grid (the virtual pad isn't the
+    // only way to correct a cell). Installed once; gated to the review stage.
+    document.addEventListener("keydown", onReviewKey);
     modalEl = el;
+  }
+
+  // Route desktop keystrokes to the selected review cell while the review grid
+  // is on screen: 1-9 sets the value, 0/Backspace/Delete clears it, arrows move
+  // the selection. Bails entirely when the review grid isn't mounted, so it
+  // never interferes with the drop/working stages or other screens.
+  function onReviewKey(e) {
+    if (!modalEl || !modalEl.classList.contains("show")) return;
+    if (!document.getElementById("optical-rgrid")) return; // not in review stage
+    if (/^[1-9]$/.test(e.key))                                  { e.preventDefault(); setReviewCell(Number(e.key)); }
+    else if (e.key === "0" || e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); setReviewCell(0); }
+    else if (e.key.indexOf("Arrow") === 0)                      { e.preventDefault(); moveReview(e.key); }
+  }
+  function moveReview(key) {
+    let i = reviewSel < 0 ? 0 : reviewSel;
+    const r = Math.floor(i / 9), c = i % 9;
+    if (key === "ArrowUp"    && r > 0) i -= 9;
+    else if (key === "ArrowDown"  && r < 8) i += 9;
+    else if (key === "ArrowLeft"  && c > 0) i -= 1;
+    else if (key === "ArrowRight" && c < 8) i += 1;
+    selectReview(i);
   }
 
   function stage() { return document.getElementById("optical-stage"); }
@@ -108,10 +132,10 @@ export const OpticalIntake = (function () {
     const drop      = document.getElementById("optical-drop");
 
     document.getElementById("optical-choose").addEventListener("click", () => {
-      Sound.key && Sound.key(); fileInput.click();
+      Sound.ok && Sound.ok(); fileInput.click();
     });
     document.getElementById("optical-camera").addEventListener("click", () => {
-      Sound.key && Sound.key(); camInput.click();
+      Sound.ok && Sound.ok(); camInput.click();
     });
     fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
     camInput .addEventListener("change", (e) => handleFile(e.target.files[0]));
@@ -249,6 +273,9 @@ export const OpticalIntake = (function () {
   async function beginProcessing(img) {
     if (busy) return;
     busy = true;
+    // start the working cue immediately — from "Requesting optical clearance."
+    // (ensureAssets can take seconds to load OpenCV/Tesseract on first run)
+    Sound.process && Sound.process();
     const ok = await ensureAssets();
     if (!ok) {
       busy = false;
@@ -256,6 +283,7 @@ export const OpticalIntake = (function () {
       return;
     }
     renderWorking("EXTRACTING NUMERIC CONTENT...");
+    Sound.process && Sound.process(); // the "reading numerals" working cue again
     // allow the working panel to paint before heavy sync CV work
     await raf2();
 
