@@ -1313,6 +1313,37 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   font-family: var(--sans); font-weight: 800; letter-spacing: .04em;
   color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.45);
 }
+/* inline links within the about prose */
+.about-prose p a {
+  color: var(--cyan); text-decoration: none;
+  border-bottom: 1px solid var(--cyan-deep);
+  transition: color .22s var(--ease), border-color .22s var(--ease);
+}
+.about-prose p a:hover {
+  color: var(--glow); border-bottom-color: var(--cyan);
+  text-shadow: 0 0 8px rgba(207,232,245,.4);
+}
+/* support links — bordered terminal chips, kin to .btn */
+.about-support {
+  display: flex; flex-wrap: wrap; gap: clamp(10px, 1.6vw, 16px);
+}
+.about-support__link {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--mono); font-size: clamp(11px, 1.1vw, 13px);
+  font-weight: 600; letter-spacing: .14em;
+  color: var(--cyan); text-decoration: none;
+  background: rgba(127,223,255,.04);
+  border: 1px solid var(--line-strong);
+  padding: 9px 16px;
+  transition: all .22s var(--ease);
+}
+.about-support__link:hover {
+  border-color: var(--cyan); color: var(--glow);
+  background: rgba(127,223,255,.07);
+  box-shadow: 0 0 14px rgba(127,223,255,.12);
+  text-shadow: 0 0 8px rgba(207,232,245,.4);
+}
+.about-support__link svg { width: 15px; height: 15px; fill: currentColor; flex: none; }
 
 /* ---------- shared CRT header: globe mark + bordered bar ---------- */
 .crt-head {
