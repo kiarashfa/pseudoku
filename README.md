@@ -10,6 +10,8 @@ Please enjoy each puzzle equally!
 
 This is an unofficial fan project, not affiliated with or endorsed by Apple TV+ or the creators of Severance.
 
-All references to Severance are for tribute purposes only. © 2026 Kiarash Farajzadehahary
+All references to Severance are for tribute purposes only. © 2026 Kiarash Farajzadehahary.
+
+⚖ Licensed under the [KFA Source-Available License 1.0](LICENSE).
 
 Made with ❤️ for the Severance fandom.
