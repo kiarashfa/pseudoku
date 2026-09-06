@@ -408,6 +408,22 @@ const App = (function () {
     upd(); setInterval(upd, 1000);
   }
 
+  /* ---- Copyright year ----
+     Pinned, not derived from git: the first-commit year is immutable, and a
+     CI checkout is shallow enough that asking git at build time would return
+     the newest commit instead. Renders "2026" while the years match and
+     "2026-2027" once they diverge. */
+  const COPYRIGHT_START_YEAR = 2026;
+
+  function stampCopyright() {
+    const el = $("#copyright-years");
+    if (!el) return;
+    const now = new Date().getFullYear();
+    el.textContent = now > COPYRIGHT_START_YEAR
+      ? COPYRIGHT_START_YEAR + "-" + now
+      : String(COPYRIGHT_START_YEAR);
+  }
+
   /* ---- Fit scaler ----
      The shared CRT now takes a fixed, pleasing shape from the viewport (see
      .crt in style.css). Each screen's readout lives in a .crt__fit layer that
@@ -746,6 +762,7 @@ const App = (function () {
     syncAudioBtns();
     rotateCatechism();
     tickClock();
+    stampCopyright();
     tickHexFooters();
     Fit.init();
     document.addEventListener("keydown", keyboard);

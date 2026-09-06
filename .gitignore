@@ -1,0 +1,15 @@
+# Local handoff config — holds the PSI API key. Never commit.
+.env
+.env.*
+!.env.example
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Local scratch
+node_modules/

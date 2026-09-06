@@ -1,0 +1,18 @@
+{
+  "name": "Pseudoku — Macrodata Refinement",
+  "short_name": "Pseudoku",
+  "description": "A working Sudoku generator, solver and image importer, housed in a Lumon Industries macrodata refinement terminal.",
+  "lang": "en",
+  "dir": "ltr",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0a1018",
+  "background_color": "#0a1018",
+  "start_url": "./",
+  "scope": "./",
+  "icons": [
+    { "src": "./favicon/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./favicon/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./favicon/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

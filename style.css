@@ -1309,6 +1309,14 @@ body.hatch { filter: contrast(1.2) brightness(.85); }
   text-shadow: 0 0 8px rgba(127,223,255,.08);
 }
 .about-prose em { color: var(--text-dim); font-style: italic; }
+/* closing copyright — deliberately quiet, sits below the disclaimer */
+.about-prose p.about-copyright {
+  margin-top: clamp(2px, 1vh, 10px);
+  padding-top: clamp(10px, 1.6vh, 18px);
+  border-top: 1px solid var(--line);
+  font-size: clamp(10px, 1.05vw, 12px); letter-spacing: .08em;
+  color: var(--text-dim); text-shadow: none; text-align: center;
+}
 .about-lead {
   font-family: var(--sans); font-weight: 800; letter-spacing: .04em;
   color: var(--glow); text-shadow: 0 0 12px rgba(127,223,255,.45);
