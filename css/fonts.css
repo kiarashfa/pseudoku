@@ -1,7 +1,7 @@
 /* ============================================================
    fonts.css — self-hosted (offline) typefaces for Pseudoku.
-   Replaces the Google Fonts <link>. This stylesheet lives at the
-   project root; the latin-subset .woff2 files live in /fonts.
+   Replaces the Google Fonts <link>. This stylesheet lives in
+   /css; the latin-subset .woff2 files live in /fonts.
 
    Families + weights match what the UI actually uses:
      IBM Plex Mono — 400 500 600 700   (--mono)
@@ -18,28 +18,28 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  src: url("../fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "IBM Plex Mono";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  src: url("../fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "IBM Plex Mono";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+  src: url("../fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "IBM Plex Mono";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("fonts/ibm-plex-mono-latin-700-normal.woff2") format("woff2");
+  src: url("../fonts/ibm-plex-mono-latin-700-normal.woff2") format("woff2");
 }
 
 /* ---------- Archivo ---------- */
@@ -48,40 +48,40 @@
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url("fonts/archivo-latin-300-normal.woff2") format("woff2");
+  src: url("../fonts/archivo-latin-300-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Archivo";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("fonts/archivo-latin-400-normal.woff2") format("woff2");
+  src: url("../fonts/archivo-latin-400-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Archivo";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("fonts/archivo-latin-500-normal.woff2") format("woff2");
+  src: url("../fonts/archivo-latin-500-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Archivo";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("fonts/archivo-latin-600-normal.woff2") format("woff2");
+  src: url("../fonts/archivo-latin-600-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Archivo";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("fonts/archivo-latin-700-normal.woff2") format("woff2");
+  src: url("../fonts/archivo-latin-700-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Archivo";
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url("fonts/archivo-latin-800-normal.woff2") format("woff2");
+  src: url("../fonts/archivo-latin-800-normal.woff2") format("woff2");
 }

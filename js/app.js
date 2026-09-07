@@ -1,7 +1,7 @@
 /* ============================================================
    app.js — ORCHESTRATOR / entry point (ES module).
 
-   Loaded via <script type="module" src="app.js"></script>.
+   Loaded via <script type="module" src="js/app.js"></script>.
    Imports the four feature areas, then defines the two pieces
    that tie them together and boots the app:
 

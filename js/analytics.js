@@ -4,7 +4,7 @@
    This is the ONLY file in the repo that holds the measurement
    ID. Every page loads this script ID-free:
 
-     <script async src="analytics.js"></script>
+     <script async src="js/analytics.js"></script>
 
    so changing the property is a one-line edit here, no matter
    how many pages the site grows to.
